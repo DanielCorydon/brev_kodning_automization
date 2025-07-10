@@ -8,8 +8,8 @@ import re
 import io
 import os
 
-st.set_page_config(page_title="Word Merge Fields Generator", layout="wide")
-st.title("Word Merge Fields Generator")
+st.set_page_config(page_title="Word Fletfeltautomat", layout="wide")
+st.title("Word Fletfeltautomat")
 
 # Define default test template text
 DEFAULT_TEMPLATE_TEXT = """IF Betingelse Ubegrænset fuldmagt
@@ -74,7 +74,7 @@ Sådan har vi gjort den likvide formue op
 Her kan du se, hvordan vi har gjort din Else til if betingelse Borger enlig ved ældrecheck berettigelse  "og din ægtefælle/samlevers" likvide formue op. Vi har hentet oplysningerne fra årsopgørelsen fra Skattestyrelsen for Årstal forrige år  ,og de oplysninger om din likvide formue, If betingelse Borger enlig ved ældrecheck berettigelse If Manuel betingelse Borger beregnes som enlig "du" Else "I" selv har givet os.
 
 IF Betingelse Formue oplyst af borger 
-"*Beløbene er oplyst af dig Else til if betingelse Borger enlig ved ældrecheck berettigelse  "og/eller din ægtefælle/samlever"."
+"*Beløbene er oplyst af dig Else til if betingelse Borger enlig ved ældrecheck berettigelse  "og/eller din ægtefælle/samlevers"."
 
 B17A – FOP Formue opgørelse – Ældrecheck besvigelseskontrol
 
@@ -95,6 +95,7 @@ Udbetaling Danmark-loven § 4
 Pensionsloven §§ 14b, 14c,  41, 42 og § 72d, stk. 2.
 (L2)"Du kan finde lovgrundlaget på www.retsinformation.dk."
 """
+
 
 def create_merge_field(parent, key):
     """Create a MERGEFIELD in Word XML format"""
@@ -395,7 +396,7 @@ def process_docx_template(doc, mappings):
     """Process an uploaded Word document and replace text with merge fields and IF fields while preserving formatting"""
     # Sort mappings by length of title (longest first) to prevent partial matches
     sorted_mappings = sorted(mappings.items(), key=lambda x: len(x[0]), reverse=True)
-    
+
     # For debugging: Keep track of replacements to show raw representation
     debug_output = []
 
@@ -403,15 +404,17 @@ def process_docx_template(doc, mappings):
         para_text = para.text
         if not para_text.strip():
             continue
-            
+
         # Debug output handling
         if para_text.strip().startswith("IF Betingelse "):
             # Handle debug output for IF condition
             condition_title = para_text.strip()[len("IF Betingelse ") :]
             condition_key = mappings.get(condition_title)
-            special_html_mappings = {"ab-ubegraenset-fuldmagt": "Html:x-fuldmagtsbetingelse"}
+            special_html_mappings = {
+                "ab-ubegraenset-fuldmagt": "Html:x-fuldmagtsbetingelse"
+            }
             true_result_key = None
-            
+
             # Find the true_result_key using existing logic
             if condition_key and condition_key in special_html_mappings:
                 true_result_key = special_html_mappings[condition_key]
@@ -432,7 +435,11 @@ def process_docx_template(doc, mappings):
                             if v.startswith("Html:") and suffix in v:
                                 true_result_key = v
                                 break
-            if not true_result_key and condition_key and condition_title == "Ubegrænset fuldmagt":
+            if (
+                not true_result_key
+                and condition_key
+                and condition_title == "Ubegrænset fuldmagt"
+            ):
                 true_result_key = "Html:x-fuldmagtsbetingelse"
 
             if condition_key and true_result_key:
@@ -440,7 +447,7 @@ def process_docx_template(doc, mappings):
             else:
                 debug_para = para_text
             debug_output.append(debug_para)
-            
+
             # Special handling for IF Betingelse paragraphs
             # Keep the first run's formatting (or create a new one if none exist)
             if len(para.runs) > 0:
@@ -448,7 +455,7 @@ def process_docx_template(doc, mappings):
                 original_run = para.runs[0]
                 for run in list(para.runs):
                     run._element.getparent().remove(run._element)
-                
+
                 # Create a new run with the same formatting
                 new_run = para.add_run()
                 # Copy formatting from original run
@@ -461,36 +468,40 @@ def process_docx_template(doc, mappings):
                     new_run.font.size = original_run.font.size
                 if original_run.font.color.rgb:
                     new_run.font.color.rgb = original_run.font.color.rgb
-                
+
                 # Add the IF field with preserved formatting
                 if condition_key and true_result_key:
-                    create_if_field_with_formatting(new_run._element, condition_key, true_result_key, original_run)
+                    create_if_field_with_formatting(
+                        new_run._element, condition_key, true_result_key, original_run
+                    )
                 else:
                     new_run.text = para_text
             else:
                 # No runs, create a new one
                 run = para.add_run()
                 if condition_key and true_result_key:
-                    create_if_field_with_formatting(run._element, condition_key, true_result_key)
+                    create_if_field_with_formatting(
+                        run._element, condition_key, true_result_key
+                    )
                 else:
                     run.text = para_text
         else:
             # Regular text paragraph - handle at run level
             # First collect all runs and their text
             run_data = [(run, run.text) for run in para.runs]
-            
+
             # Create debug preview
             debug_para = para_text
             for titel, nogle in sorted_mappings:
                 if titel in debug_para:
                     debug_para = debug_para.replace(titel, f"{{ MERGEFIELD {nogle} }}")
             debug_output.append(debug_para)
-            
+
             # Process each run, replacing text with merge fields where needed
             for i, (run, run_text) in enumerate(run_data):
                 if not run_text.strip():
                     continue
-                
+
                 # Check for replacements in this run
                 replaced = False
                 for titel, nogle in sorted_mappings:
@@ -498,20 +509,20 @@ def process_docx_template(doc, mappings):
                         # This run contains text that needs to be replaced
                         # Keep the original run for its formatting
                         original_format = run._element
-                        
+
                         # Replace the run's text with parts before, after, and merge field
                         parts = run_text.split(titel)
-                        
+
                         # Clear this run's content
                         run._element.clear_content()
-                        
+
                         # Add text before the field
                         if parts[0]:
                             run.text = parts[0]
-                            
+
                         # Add the merge field
                         create_merge_field_with_formatting(run._element, nogle, run)
-                        
+
                         # If there's text after the field, create a new run with the same formatting
                         if len(parts) > 1 and parts[1]:
                             new_run = para.add_run(parts[1])
@@ -525,15 +536,16 @@ def process_docx_template(doc, mappings):
                                 new_run.font.size = run.font.size
                             if run.font.color.rgb:
                                 new_run.font.color.rgb = run.font.color.rgb
-                        
+
                         replaced = True
                         break
-                
+
                 # If no replacements were made, keep the run as is
                 if not replaced:
                     pass  # No changes needed
 
     return doc, "\n".join(debug_output)
+
 
 # Try to load default mapping at startup
 DEFAULT_MAPPING_PATH = os.path.join("documents", "liste over alle nøgler.xlsx")
@@ -549,8 +561,16 @@ if os.path.exists(DEFAULT_MAPPING_PATH):
         default_mappings = None
 
 # File upload for Excel
-st.subheader("1. Upload Excel file with Titel/Nøgle mappings")
-uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"])
+st.subheader("1. Upload Excel-fil med Titel/Nøgle-koblinger")
+
+# Show info about default mapping below the upload field
+if default_mappings:
+    st.info(
+        f"En standard-fil bruges allerede, men du kan uploade din egen, hvis du mener, at filen er forkert eller forældet."
+    )
+
+uploaded_file = st.file_uploader("Vælg en Excel-fil", type=["xlsx"])
+
 
 mappings = None
 if uploaded_file is not None:
@@ -558,30 +578,32 @@ if uploaded_file is not None:
         df = pd.read_excel(uploaded_file, sheet_name="query")
         if "Titel" not in df.columns or "Nøgle" not in df.columns:
             st.error(
-                "Excel file must contain 'Titel' and 'Nøgle' columns in the 'query' sheet."
+                "Excel-filen skal indeholde kolonnerne 'Titel' og 'Nøgle' i arket 'query'."
             )
         else:
-            st.write("Mappings found:", df.shape[0])
-            st.dataframe(df[["Titel", "Nøgle"]], hide_index=True)
+            st.write("Antal koblinger fundet:", df.shape[0])
+            with st.expander("Vis titel/nøgle-par (fra uploadet fil)", expanded=False):
+                st.dataframe(df[["Titel", "Nøgle"]], hide_index=True)
             mappings = {row["Titel"]: row["Nøgle"] for _, row in df.iterrows()}
     except Exception as e:
-        st.error(f"Error processing Excel file: {str(e)}")
+        st.error(f"Fejl ved behandling af Excel-fil: {str(e)}")
 elif default_mappings:
-    st.info(f"Loaded default mapping from '{DEFAULT_MAPPING_PATH}'.")
-    st.write("Mappings found:", len(default_mappings))
-    st.dataframe(
-        pd.DataFrame(list(default_mappings.items()), columns=["Titel", "Nøgle"]),
-        hide_index=True,
-    )
+    st.write("Antal koblinger fundet:", len(default_mappings))
+    with st.expander("Vis titel/nøgle-par (fra standardfil)", expanded=False):
+        st.dataframe(
+            pd.DataFrame(list(default_mappings.items()), columns=["Titel", "Nøgle"]),
+            hide_index=True,
+        )
     mappings = default_mappings
 else:
-    st.info("Please upload an Excel file with mappings.")
+    st.info("Upload venligst en Excel-fil med koblinger.")
 
 if mappings:
     # Add file uploader for Word template
-    st.subheader("2. Upload your Word template (optional)")
+    st.subheader("2. Upload din Word-skabelon")
     uploaded_docx = st.file_uploader(
-        "Upload a .docx file as template (if not provided, use text area below)", type=["docx"]
+        "Upload en .docx-fil som skabelon (hvis ikke angivet, bruges tekstområdet nedenfor)",
+        type=["docx"],
     )
 
     template_text = None
@@ -591,123 +613,73 @@ if mappings:
         # Read the uploaded Word document
         try:
             doc_template = Document(uploaded_docx)
-            st.success("Word template loaded successfully.")
         except Exception as e:
-            st.error(f"Error reading Word document: {str(e)}")
+            st.error(f"Fejl ved behandling af Word-dokument: {str(e)}")
     else:
-        # Text input with default template text
-        st.subheader("Or enter your template text")
-        template_text = st.text_area(
-            "Text with phrases to be replaced by merge fields", 
-            value=DEFAULT_TEMPLATE_TEXT,  # Set default template text
-            height=300
+        # Automatically load the default document from the documents folder
+        default_doc_path = os.path.join(
+            "documents", "Ukodet dokument fra ønsket brevdesgin.docx"
         )
+        if os.path.exists(default_doc_path):
+            try:
+                doc_template = Document(default_doc_path)
+                st.info(f"Standarddokumentet fra '{default_doc_path}' er indlæst.")
+            except Exception as e:
+                st.error(f"Fejl ved indlæsning af standarddokument: {str(e)}")
+        else:
+            st.error("Standarddokument ikke fundet. Upload venligst en Word-skabelon.")
 
-    # Auto-generate on load
+    # Move the Generate Document button here, right after the template upload
+    if st.button("Generér dokument"):
+        if doc_template is not None:
+            doc, debug_text = process_docx_template(doc_template, mappings)
+            doc_io = io.BytesIO()
+            doc.save(doc_io)
+            doc_io.seek(0)
+            st.subheader("3. Download det genererede dokument")
+            st.download_button(
+                label="Download Word-dokument",
+                data=doc_io,
+                file_name="dokument_med_fletfelter.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            st.success("Dokumentet er genereret!")
+        else:
+            st.warning("Upload venligst en Word-skabelon eller indtast skabelontekst.")
+
+    # Auto-generate on load (unchanged)
     if "initialized" not in st.session_state:
         st.session_state.initialized = True
         if doc_template is not None:
             doc, debug_text = process_docx_template(doc_template, mappings)
-            st.subheader("Debug Preview (Raw Text with Merge Fields)")
-            st.text_area(
-                "This shows how the merge fields appear in the document:",
-                value=debug_text,
-                height=200,
-                disabled=True,
-            )
             doc_io = io.BytesIO()
             doc.save(doc_io)
             doc_io.seek(0)
-            st.subheader("3. Download the generated document")
+            st.subheader("3. Download det genererede dokument")
             st.download_button(
-                label="Download Word Document",
+                label="Download Word-dokument",
                 data=doc_io,
-                file_name="document_with_merge_fields.docx",
+                file_name="dokument_med_fletfelter.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
-            st.success("Document generated successfully!")
-        elif template_text:
-            doc, debug_text = create_document_with_merge_fields(template_text, mappings)
-            st.subheader("Debug Preview (Raw Text with Merge Fields)")
-            st.text_area(
-                "This shows how the merge fields appear in the document:",
-                value=debug_text,
-                height=200,
-                disabled=True,
-            )
-            doc_io = io.BytesIO()
-            doc.save(doc_io)
-            doc_io.seek(0)
-            st.subheader("3. Download the generated document")
-            st.download_button(
-                label="Download Word Document",
-                data=doc_io,
-                file_name="document_with_merge_fields.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-            st.success("Document generated successfully!")
-
-    if st.button("Generate Document"):
-        if doc_template is not None:
-            doc, debug_text = process_docx_template(doc_template, mappings)
-            st.subheader("Debug Preview (Raw Text with Merge Fields)")
-            st.text_area(
-                "This shows how the merge fields appear in the document:",
-                value=debug_text,
-                height=200,
-                disabled=True,
-            )
-            doc_io = io.BytesIO()
-            doc.save(doc_io)
-            doc_io.seek(0)
-            st.subheader("3. Download the generated document")
-            st.download_button(
-                label="Download Word Document",
-                data=doc_io,
-                file_name="document_with_merge_fields.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-            st.success("Document generated successfully!")
-        elif template_text:
-            doc, debug_text = create_document_with_merge_fields(template_text, mappings)
-            st.subheader("Debug Preview (Raw Text with Merge Fields)")
-            st.text_area(
-                "This shows how the merge fields appear in the document:",
-                value=debug_text,
-                height=200,
-                disabled=True,
-            )
-            doc_io = io.BytesIO()
-            doc.save(doc_io)
-            doc_io.seek(0)
-            st.subheader("3. Download the generated document")
-            st.download_button(
-                label="Download Word Document",
-                data=doc_io,
-                file_name="document_with_merge_fields.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-            st.success("Document generated successfully!")
-        else:
-            st.warning("Please upload a Word template or enter template text.")
+            st.success("Dokumentet er genereret!")
 
 # Add instructions
-with st.expander("Help & Instructions"):
+with st.expander("Hjælp & Vejledning"):
     st.markdown(
         """
-    ### How to use this app:
+    ### Sådan bruger du denne app:
     
-    1. **Upload an Excel file** that contains a sheet named 'query' with two columns:
-       - "Titel": Human-readable phrases that appear in your text
-       - "Nøgle": Corresponding field names to be used as Word merge fields
+    1. **Upload en Excel-fil** der indeholder et ark med navnet 'query' og to kolonner:
+       - "Titel": Tekststrenge, der optræder i dit brev
+       - "Nøgle": Felt-navne, der skal bruges som Word-fletfelter
     
-    2. **Upload a Word template** (optional) or enter your template text. The template should contain the phrases from the "Titel" column
+    2. **Upload en Word-skabelon**. Skabelonen skal indeholde de tekststrenge, der står i "Titel"-kolonnen
     
-    3. **Generate the document** by clicking the button
+    3. **Generér dokumentet** ved at klikke på knappen
     
-    4. **Download** the resulting Word document with merge fields
+    4. **Download** det færdige Word-dokument med fletfelter
     
-    The app will replace each occurrence of phrases from the "Titel" column with 
-    corresponding Word merge fields using the "Nøgle" values.
+    Appen udskifter hver forekomst af tekst fra "Titel"-kolonnen med tilsvarende Word-fletfelter ud fra "Nøgle"-værdierne.
     """
     )
