@@ -8,7 +8,7 @@ import re
 import io
 import os
 
-st.set_page_config(page_title="Word Fletfeltautomat", layout="wide")
+st.set_page_config(page_title="Brevkoder-automater", layout="wide")
 st.title("Word Fletfeltautomat")
 
 # Define default test template text
@@ -599,70 +599,33 @@ else:
     st.info("Upload venligst en Excel-fil med koblinger.")
 
 if mappings:
-    # Add file uploader for Word template
-    st.subheader("2. Upload din Word-skabelon")
+    # Add file uploader for Word template and generate on upload
+    st.subheader("2. Upload din Word-skabelon og generér dokument")
     uploaded_docx = st.file_uploader(
-        "Upload en .docx-fil som skabelon (hvis ikke angivet, bruges tekstområdet nedenfor)",
+        "Upload en .docx-fil som skabelon (dokumentet genereres automatisk ved upload)",
         type=["docx"],
     )
 
-    template_text = None
-    doc_template = None
-
     if uploaded_docx is not None:
-        # Read the uploaded Word document
+        # Read the uploaded Word document and generate output immediately
         try:
             doc_template = Document(uploaded_docx)
+            doc, debug_text = process_docx_template(doc_template, mappings)
+            doc_io = io.BytesIO()
+            doc.save(doc_io)
+            doc_io.seek(0)
+            st.subheader("3. Download det genererede dokument")
+            st.download_button(
+                label="Download Word-dokument",
+                data=doc_io,
+                file_name="dokument_med_fletfelter.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            st.success("Dokumentet er genereret!")
         except Exception as e:
             st.error(f"Fejl ved behandling af Word-dokument: {str(e)}")
     else:
-        # Automatically load the default document from the documents folder
-        default_doc_path = os.path.join(
-            "documents", "Ukodet dokument fra ønsket brevdesgin.docx"
-        )
-        if os.path.exists(default_doc_path):
-            try:
-                doc_template = Document(default_doc_path)
-                st.info(f"Standarddokumentet fra '{default_doc_path}' er indlæst.")
-            except Exception as e:
-                st.error(f"Fejl ved indlæsning af standarddokument: {str(e)}")
-        else:
-            st.error("Standarddokument ikke fundet. Upload venligst en Word-skabelon.")
-
-    # Move the Generate Document button here, right after the template upload
-    if st.button("Generér dokument"):
-        if doc_template is not None:
-            doc, debug_text = process_docx_template(doc_template, mappings)
-            doc_io = io.BytesIO()
-            doc.save(doc_io)
-            doc_io.seek(0)
-            st.subheader("3. Download det genererede dokument")
-            st.download_button(
-                label="Download Word-dokument",
-                data=doc_io,
-                file_name="dokument_med_fletfelter.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-            st.success("Dokumentet er genereret!")
-        else:
-            st.warning("Upload venligst en Word-skabelon eller indtast skabelontekst.")
-
-    # Auto-generate on load (unchanged)
-    if "initialized" not in st.session_state:
-        st.session_state.initialized = True
-        if doc_template is not None:
-            doc, debug_text = process_docx_template(doc_template, mappings)
-            doc_io = io.BytesIO()
-            doc.save(doc_io)
-            doc_io.seek(0)
-            st.subheader("3. Download det genererede dokument")
-            st.download_button(
-                label="Download Word-dokument",
-                data=doc_io,
-                file_name="dokument_med_fletfelter.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-            st.success("Dokumentet er genereret!")
+        st.info("Upload venligst en Word-skabelon.")
 
 # Add instructions
 with st.expander("Hjælp & Vejledning"):
