@@ -637,11 +637,10 @@ with st.expander("Hjælp & Vejledning"):
        - "Titel": Tekststrenge, der optræder i dit brev
        - "Nøgle": Felt-navne, der skal bruges som Word-fletfelter
     
-    2. **Upload en Word-skabelon**. Skabelonen skal indeholde de tekststrenge, der står i "Titel"-kolonnen
+    2. **Upload en Word-skabelon**. Skabelonen skal indeholde de tekststrenge, der står i "Titel"-kolonnen.
+       - Når du uploader skabelonen, genereres dokumentet automatisk.
     
-    3. **Generér dokumentet** ved at klikke på knappen
-    
-    4. **Download** det færdige Word-dokument med fletfelter
+    3. **Download** det færdige Word-dokument med fletfelter via knappen, der vises efter upload.
     
     Appen udskifter hver forekomst af tekst fra "Titel"-kolonnen med tilsvarende Word-fletfelter ud fra "Nøgle"-værdierne.
     """
