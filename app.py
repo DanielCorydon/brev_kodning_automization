@@ -9,7 +9,7 @@ import io
 import os
 
 st.set_page_config(page_title="Brevkoder-automater", layout="wide")
-st.title("Word Fletfeltautomat")
+st.title("Brevkoder-automater")
 
 # Define default test template text
 DEFAULT_TEMPLATE_TEXT = """IF Betingelse Ubegrænset fuldmagt
