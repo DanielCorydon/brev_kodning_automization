@@ -548,15 +548,9 @@ def process_docx_template(doc, mappings):
 
 
 # Try to load default mapping at startup
-DEFAULT_MAPPING_PATH = os.path.join(
-    "documents", "liste over alle nøgler.xlsx"
-)  # Make sure this matches the exact case in your repo
-
+DEFAULT_MAPPING_PATH = os.path.join("documents", "Liste over alle nøgler.xlsx")
 default_mappings = None
-
-# Debug: Show if the file exists
 if os.path.exists(DEFAULT_MAPPING_PATH):
-    st.info(f"Excel-mapping fil fundet: {DEFAULT_MAPPING_PATH}")
     try:
         df_default = pd.read_excel(DEFAULT_MAPPING_PATH, sheet_name="query")
         if "Titel" in df_default.columns and "Nøgle" in df_default.columns:
@@ -564,14 +558,7 @@ if os.path.exists(DEFAULT_MAPPING_PATH):
                 row["Titel"]: row["Nøgle"] for _, row in df_default.iterrows()
             }
     except Exception as e:
-        st.error(f"Fejl ved indlæsning af standard Excel-fil: {str(e)}")
         default_mappings = None
-else:
-    st.warning(f"Excel-mapping fil IKKE fundet: {DEFAULT_MAPPING_PATH}")
-
-# If file is missing or failed to load, do not use fallback
-# if default_mappings is None:
-#     default_mappings = EMBEDDED_DEFAULT_MAPPINGS
 
 # File upload for Excel
 st.subheader("1. Upload Excel-fil med Titel/Nøgle-koblinger")
