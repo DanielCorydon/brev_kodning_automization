@@ -1,0 +1,20 @@
+[project]
+name = "brev_kodning_automization"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Daniel Corydon-Petersen", email = "dacr@atp.dk"},
+]
+dependencies = [
+    "streamlit>=1.46.1",
+    "pandas>=2.1.1", 
+    "openpyxl>=3.1.2",
+    "python-docx>=0.8.11"
+]
+requires-python = "==3.11.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
