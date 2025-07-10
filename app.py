@@ -600,7 +600,7 @@ else:
 
 if mappings:
     # Add file uploader for Word template and generate on upload
-    st.subheader("2. Upload din Word-skabelon og generér dokument")
+    st.subheader("2. Upload dit ukodede brev og generér kodet version")
     uploaded_docx = st.file_uploader(
         "Upload en .docx-fil som skabelon (dokumentet genereres automatisk ved upload)",
         type=["docx"],
@@ -615,13 +615,13 @@ if mappings:
             doc.save(doc_io)
             doc_io.seek(0)
             st.subheader("3. Download det genererede dokument")
+            st.success("Dokumentet er genereret!")
             st.download_button(
                 label="Download Word-dokument",
                 data=doc_io,
                 file_name="dokument_med_fletfelter.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
-            st.success("Dokumentet er genereret!")
         except Exception as e:
             st.error(f"Fejl ved behandling af Word-dokument: {str(e)}")
     else:
