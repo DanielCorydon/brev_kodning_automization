@@ -58,6 +58,53 @@ if mappings:
         type=["docx"],
     )
 
+    # --- New: Text snippet processing ---
+    st.subheader("2b. Indsæt tekststykke og generér kodet version")
+    if "text_input" not in st.session_state:
+        st.session_state["text_input"] = ""
+
+    def update_text_output():
+        pass  # No-op, just to trigger rerun
+
+    text_input = st.text_area(
+        "Indsæt et tekststykke her (f.eks. et afsnit fra et brev)",
+        value=st.session_state["text_input"],
+        height=150,
+        placeholder="Indsæt tekst, der skal kodes med fletfelter...",
+        key="text_input",
+        on_change=update_text_output,
+    )
+
+    if st.session_state["text_input"].strip():
+        from src.components.document_processing import (
+            create_document_with_merge_fields,
+        )
+
+        _, debug_output = create_document_with_merge_fields(
+            st.session_state["text_input"], mappings
+        )
+        st.markdown("**Kopierbar kodet tekst:**")
+        st.text_area(
+            "Resultat:",
+            debug_output,
+            height=150,
+            key="output_text_snippet",
+        )
+    elif st.session_state["text_input"] != "":
+        st.info("Indsæt venligst noget tekst for at generere kodet version.")
+    # --- End new feature ---
+
+    # --- Auto-load for testing if no upload ---
+    if uploaded_docx is None:
+        default_docx_path = os.path.join(
+            "documents", "Ukodet dokument fra ønsket brevdesgin.docx"
+        )
+        if os.path.exists(default_docx_path):
+            with open(default_docx_path, "rb") as f:
+                uploaded_docx = io.BytesIO(f.read())
+                uploaded_docx.name = "Ukodet dokument fra ønsket brevdesgin.docx"
+    # --- End auto-load ---
+
     if uploaded_docx is not None:
         # Read the uploaded Word document and generate output immediately
         try:
