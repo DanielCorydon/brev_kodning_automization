@@ -251,7 +251,11 @@ def process_docx_template(doc, mappings):
                         run._element.clear_content()
                         if parts[0]:
                             run.text = parts[0]
+                        # Insert merge field and remove color/highlight from this run
                         create_merge_field_with_formatting(run._element, nogle, run)
+                        run.font.color.rgb = None
+                        if hasattr(run.font, "highlight_color"):
+                            run.font.highlight_color = None
                         if len(parts) > 1 and parts[1]:
                             new_run = para.add_run(parts[1])
                             new_run.bold = run.bold
@@ -263,6 +267,11 @@ def process_docx_template(doc, mappings):
                                 new_run.font.size = run.font.size
                             if run.font.color.rgb:
                                 new_run.font.color.rgb = run.font.color.rgb
+                            if (
+                                hasattr(new_run.font, "highlight_color")
+                                and run.font.highlight_color
+                            ):
+                                new_run.font.highlight_color = run.font.highlight_color
                         replaced = True
                         break
                 if not replaced:
