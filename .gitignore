@@ -1,3 +1,5 @@
+# Ignore any files containing ~$ in their name
+*~$*
 .py[cod]
 __pycache__/
 .mypy_cache/
