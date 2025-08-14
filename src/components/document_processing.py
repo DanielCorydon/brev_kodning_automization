@@ -6,29 +6,24 @@ from .merge_fields import (
     create_merge_field_with_formatting,
     create_if_field_with_formatting,
 )
+import re
 
 
-def process_paragraph(paragraph, text, mappings):
-    sorted_mappings = sorted(mappings.items(), key=lambda x: len(x[0]), reverse=True)
-    p = paragraph._p
-    for child in list(p):
-        p.remove(child)
-    if text.strip().startswith("IF Betingelse "):
-        condition_title = text.strip()[len("IF Betingelse ") :]
-        condition_key = mappings.get(condition_title)
-        special_html_mappings = {
-            "ab-ubegraenset-fuldmagt": "Html:x-fuldmagtsbetingelse",
-        }
-        true_result_key = None
-        if condition_key and condition_key in special_html_mappings:
-            true_result_key = special_html_mappings[condition_key]
-        elif condition_key:
-            if f"Html:{condition_key}" in mappings.values():
-                for k, v in mappings.items():
-                    if v == f"Html:{condition_key}":
-                        true_result_key = v
-                        break
-        if not true_result_key and condition_key:
+def _get_if_field_code(condition_title, mappings):
+    condition_key = mappings.get(condition_title)
+    special_html_mappings = {
+        "ab-ubegraenset-fuldmagt": "Html:x-fuldmagtsbetingelse",
+    }
+    true_result_key = None
+    if condition_key and condition_key in special_html_mappings:
+        true_result_key = special_html_mappings[condition_key]
+    elif condition_key:
+        if f"Html:{condition_key}" in mappings.values():
+            for k, v in mappings.items():
+                if v == f"Html:{condition_key}":
+                    true_result_key = v
+                    break
+        if not true_result_key:
             suffix = None
             if "-" in condition_key:
                 suffix = condition_key.split("-", 1)[1]
@@ -39,19 +34,47 @@ def process_paragraph(paragraph, text, mappings):
                     if v.startswith("Html:") and suffix in v:
                         true_result_key = v
                         break
-        if (
-            not true_result_key
-            and condition_key
-            and condition_title == "Ubegrænset fuldmagt"
-        ):
-            true_result_key = "Html:x-fuldmagtsbetingelse"
+    if (
+        not true_result_key
+        and condition_key
+        and condition_title == "Ubegrænset fuldmagt"
+    ):
+        true_result_key = "Html:x-fuldmagtsbetingelse"
+    return condition_key, true_result_key
+
+
+def process_paragraph(paragraph, text, mappings):
+    # Replace all 'If betingelse <condition>' with IF fields, rest with merge fields
+    sorted_mappings = sorted(mappings.items(), key=lambda x: len(x[0]), reverse=True)
+    p = paragraph._p
+    for child in list(p):
+        p.remove(child)
+
+    # Regex to find all 'If betingelse <condition>' (case-insensitive)
+    pattern = re.compile(r"[Ii]f betingelse ([^\”\"]+)")
+    pos = 0
+    for match in pattern.finditer(text):
+        start, end = match.span()
+        # Add text before the match
+        if start > pos:
+            _add_mergefields_to_text(paragraph, text[pos:start], sorted_mappings)
+        condition_title = match.group(1).strip()
+        condition_key, true_result_key = _get_if_field_code(condition_title, mappings)
+        run = paragraph.add_run()
+        r = run._r
         if condition_key and true_result_key:
-            run = paragraph.add_run()
-            r = run._r
             create_if_field(r, condition_key, true_result_key)
         else:
-            paragraph.add_run(text)
-        return paragraph
+            run.add_text(match.group(0))
+        pos = end
+    # Add any remaining text after last match
+    if pos < len(text):
+        _add_mergefields_to_text(paragraph, text[pos:], sorted_mappings)
+    return paragraph
+
+
+def _add_mergefields_to_text(paragraph, text, sorted_mappings):
+    # Replace all mapped titles with merge fields, rest as text
     remaining_text = text
     while remaining_text:
         match_found = False
@@ -69,65 +92,53 @@ def process_paragraph(paragraph, text, mappings):
         if not match_found:
             paragraph.add_run(remaining_text)
             break
-    return paragraph
 
 
 def create_document_with_merge_fields(template_text, mappings):
+    import re
+
     doc = Document()
     paragraphs = template_text.split("\n")
     debug_output = []
+    pattern = re.compile(r"[Ii]f betingelse ([^\”\"]+)")
     for para_text in paragraphs:
         if para_text.strip():
-            if para_text.strip().startswith("IF Betingelse "):
-                condition_title = para_text.strip()[len("IF Betingelse ") :]
-                condition_key = mappings.get(condition_title)
-                special_html_mappings = {
-                    "ab-ubegraenset-fuldmagt": "Html:x-fuldmagtsbetingelse",
-                }
-                true_result_key = None
-                if condition_key and condition_key in special_html_mappings:
-                    true_result_key = special_html_mappings[condition_key]
-                elif condition_key:
-                    if f"Html:{condition_key}" in mappings.values():
-                        for k, v in mappings.items():
-                            if v == f"Html:{condition_key}":
-                                true_result_key = v
-                                break
-                    if not true_result_key:
-                        suffix = None
-                        if "-" in condition_key:
-                            suffix = condition_key.split("-", 1)[1]
-                        elif ":" in condition_key:
-                            suffix = condition_key.split(":", 1)[1]
-                        if suffix:
-                            for k, v in mappings.items():
-                                if v.startswith("Html:") and suffix in v:
-                                    true_result_key = v
-                                    break
-                if (
-                    not true_result_key
-                    and condition_key
-                    and condition_title == "Ubegrænset fuldmagt"
-                ):
-                    true_result_key = "Html:x-fuldmagtsbetingelse"
+            debug_line = ""
+            pos = 0
+            for match in pattern.finditer(para_text):
+                start, end = match.span()
+                # Add text before the match, replacing mapped titles
+                if start > pos:
+                    debug_line += _replace_titles_with_mergefields(
+                        para_text[pos:start], mappings
+                    )
+                condition_title = match.group(1).strip()
+                condition_key, true_result_key = _get_if_field_code(
+                    condition_title, mappings
+                )
                 if condition_key and true_result_key:
-                    debug_para = f'{{ IF "J" = "{{ MERGEFIELD {condition_key} }}" "{{ MERGEFIELD {true_result_key} }}" }}'
+                    debug_line += f'{{ IF "{{ MERGEFIELD {condition_key} }}" = "J" "din" "jeres" }}'
                 else:
-                    debug_para = para_text
-                debug_output.append(debug_para)
-            else:
-                debug_para = para_text
-                for titel, nogle in sorted(
-                    mappings.items(), key=lambda x: len(x[0]), reverse=True
-                ):
-                    if titel in debug_para:
-                        debug_para = debug_para.replace(
-                            titel, f"{{ MERGEFIELD {nogle} }}"
-                        )
-                debug_output.append(debug_para)
+                    debug_line += match.group(0)
+                pos = end
+            # Add any remaining text after last match
+            if pos < len(para_text):
+                debug_line += _replace_titles_with_mergefields(
+                    para_text[pos:], mappings
+                )
+            debug_output.append(debug_line)
             p = doc.add_paragraph()
             process_paragraph(p, para_text, mappings)
     return doc, "\n".join(debug_output)
+
+
+def _replace_titles_with_mergefields(text, mappings):
+    # Replace all mapped titles with merge field code strings
+    sorted_mappings = sorted(mappings.items(), key=lambda x: len(x[0]), reverse=True)
+    result = text
+    for titel, nogle in sorted_mappings:
+        result = result.replace(titel, f"{{ MERGEFIELD {nogle} }}")
+    return result
 
 
 def process_docx_template(doc, mappings):
