@@ -9,6 +9,7 @@ from src.components.process_document import (
     extract_colors_from_paragraph,
     process_paragraph_with_color_aware_replacements,
     insert_actual_mergefields,  # Added new import
+    remove_comments_from_docx,  # Added new import
 )
 from src.components.find_fields import (
     transform_text_with_single_if_condition,
@@ -123,6 +124,10 @@ Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din æ
         # Read the uploaded Word document and generate output immediately
         try:
             doc_template = load_docx(uploaded_docx)
+
+            # Remove comments from the document
+            doc_template = remove_comments_from_docx(doc_template)
+
             # For each paragraph, first replace titles, then apply IF Betingelse transformation
             for para in doc_template.paragraphs:
 

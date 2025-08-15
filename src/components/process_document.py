@@ -276,3 +276,65 @@ def _advance_position(runs_info, run_idx, run_pos, text_length):
             remaining = 0
 
     return run_idx, run_pos
+
+
+def remove_comments_from_docx(doc):
+    """
+    Remove all comments from a Word document including comment definitions,
+    comment ranges, and comment references.
+
+    Args:
+        doc (Document): A `Document` object from `python-docx`.
+
+    Returns:
+        Document: The modified document with comments removed.
+    """
+    # Remove comment definitions from comments part
+    for comment in doc.element.xpath("//w:comment"):
+        parent = comment.getparent()
+        if parent is not None:
+            parent.remove(comment)
+
+    # Remove comment range start markers
+    for comment_start in doc.element.xpath("//w:commentRangeStart"):
+        parent = comment_start.getparent()
+        if parent is not None:
+            parent.remove(comment_start)
+
+    # Remove comment range end markers
+    for comment_end in doc.element.xpath("//w:commentRangeEnd"):
+        parent = comment_end.getparent()
+        if parent is not None:
+            parent.remove(comment_end)
+
+    # Remove comment references
+    for comment_ref in doc.element.xpath("//w:commentReference"):
+        parent = comment_ref.getparent()
+        if parent is not None:
+            parent.remove(comment_ref)
+
+    # Also check for comments in headers and footers
+    for section in doc.sections:
+        # Remove comments from headers
+        if hasattr(section, "header"):
+            header = section.header
+            if header:
+                for comment_element in header._element.xpath(
+                    ".//w:comment | .//w:commentRangeStart | .//w:commentRangeEnd | .//w:commentReference"
+                ):
+                    parent = comment_element.getparent()
+                    if parent is not None:
+                        parent.remove(comment_element)
+
+        # Remove comments from footers
+        if hasattr(section, "footer"):
+            footer = section.footer
+            if footer:
+                for comment_element in footer._element.xpath(
+                    ".//w:comment | .//w:commentRangeStart | .//w:commentRangeEnd | .//w:commentReference"
+                ):
+                    parent = comment_element.getparent()
+                    if parent is not None:
+                        parent.remove(comment_element)
+
+    return doc
