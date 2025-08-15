@@ -75,7 +75,7 @@ Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din æ
     # Text input for testing
     test_text = st.text_area(
         "Indsæt tekst til test:",
-        value=default_test_text,
+        value="",
         height=150,
         placeholder='Eksempel: IF Betingelse KundeType "Privatkunde" ELSE "Erhvervskunde"',
     )
@@ -112,25 +112,6 @@ Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din æ
         else:
             st.warning("Indsæt venligst noget tekst til transformation.")
 
-    # Auto-run transformation on page load with default text
-    elif test_text and test_text.strip():
-        # Apply transformations using the new function
-        transformed_text = transform_text(test_text, mappings)
-
-        st.subheader("Resultat (automatisk genereret):")
-        st.text_area(
-            "Transformeret tekst (kan kopieres):",
-            value=transformed_text,
-            height=150,
-            key="auto_result_text",
-        )
-
-        # Show if any changes were made
-        if test_text != transformed_text:
-            st.success("✅ Teksten blev automatisk transformeret!")
-        else:
-            st.info("ℹ️ Ingen 'IF Betingelse' mønstre fundet i teksten.")
-
     # Add file uploader for Word template and generate on upload
     st.subheader("2. Upload dit ukodede brev og generér kodet version")
     uploaded_docx = st.file_uploader(
@@ -138,41 +119,20 @@ Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din æ
         type=["docx"],
     )
 
-    # --- Auto-load for testing if no upload ---
-    if uploaded_docx is None:
-        default_docx_path = os.path.join(
-            "documents", "Ukodet dokument fra ønsket brevdesgin.docx"
-        )
-        if os.path.exists(default_docx_path):
-            with open(default_docx_path, "rb") as f:
-                uploaded_docx = io.BytesIO(f.read())
-                uploaded_docx.name = "Ukodet dokument fra ønsket brevdesgin.docx"
-    # --- End auto-load ---
-
     if uploaded_docx is not None:
         # Read the uploaded Word document and generate output immediately
         try:
             doc_template = load_docx(uploaded_docx)
-            print("Leggo \n\n\n")
             # For each paragraph, first replace titles, then apply IF Betingelse transformation
             for para in doc_template.paragraphs:
 
                 # Check for coloration in the paragraph
                 text_colors, background_colors = extract_colors_from_paragraph(para)
                 if text_colors or background_colors:
-                    print("Text colors:", text_colors)
-                    print("Background colors:", background_colors)
-                    print("\n\n")
-
                     # Apply color-aware transformations for paragraphs with colors
-                    print("***Para starting: ***", "\n")
-                    print("ORIGINAL PARAGRAPH:\n", para.text, "\n\n")
-
-                    # Use color-aware replacement for colored paragraphs
                     para.text = process_paragraph_with_color_aware_replacements(
                         para, mappings
                     )
-                    print("***MERGEFIELDS TRANSFORMED: ***\n", para.text, "\n\n")
 
                     # Apply IF transformations on the already processed text
                     transformed_text = transform_text_with_single_if_condition(
@@ -181,22 +141,13 @@ Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din æ
                     transformed_text = transform_text_with_if_betingelse(
                         transformed_text, mappings
                     )
-                    print("***IF SENTENCES TRANSFORMED***\n", transformed_text, "\n\n")
 
                     if para.text != transformed_text:
                         para.text = transformed_text
-                # else:
-                #     # For paragraphs without special coloring, use regular transformation
-                #     transformed_text = transform_text(para.text, mappings)
-                #     if para.text != transformed_text:
-                #         para.text = transformed_text
-                #         insert_mergefields(para)
 
             # Convert all text-based MERGEFIELD syntax to actual Word merge fields
-            print("***CONVERTING TEXT-BASED MERGEFIELDS TO ACTUAL MERGEFIELDS***")
             for para in doc_template.paragraphs:
                 insert_actual_mergefields(para)
-            print("***MERGEFIELD CONVERSION COMPLETE***\n")
 
             doc_io = save_docx_to_bytes(doc_template)
             st.subheader("3. Download det genererede dokument")
