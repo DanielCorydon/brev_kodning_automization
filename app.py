@@ -14,6 +14,7 @@ from src.components.find_fields import (
     transform_text_with_single_if_condition,
     transform_text_with_if_betingelse,
     replace_titles_with_mergefields,
+    find_markers_across_runs,
 )
 
 st.set_page_config(page_title="Brevkoder-automater", layout="wide")
@@ -141,7 +142,7 @@ Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din æ
     # --- Auto-load for testing if no upload ---
     if uploaded_docx is None:
         default_docx_path = os.path.join(
-            "documents", "Ukodet dokument fra ønsket brevdesgin.docx"
+            "documents", "Ukodet brev 1 - Varmetillæg.docx"
         )
         if os.path.exists(default_docx_path):
             with open(default_docx_path, "rb") as f:
@@ -155,42 +156,44 @@ Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din æ
             doc_template = load_docx(uploaded_docx)
             print("Leggo \n\n\n")
             # For each paragraph, first replace titles, then apply IF Betingelse transformation
-            for para in doc_template.paragraphs:
+            all_paragraphs = list(doc_template.paragraphs)
+            find_markers_across_runs(all_paragraphs)
+            # for para in doc_template.paragraphs:
 
-                # Check for coloration in the paragraph
-                text_colors, background_colors = extract_colors_from_paragraph(para)
-                if text_colors or background_colors:
-                    print("Text colors:", text_colors)
-                    print("Background colors:", background_colors)
-                    print("\n\n")
+            #     # Check for coloration in the paragraph
+            #     text_colors, background_colors = extract_colors_from_paragraph(para)
+            #     if text_colors or background_colors:
+            #         print("Text colors:", text_colors)
+            #         print("Background colors:", background_colors)
+            #         print("\n\n")
 
-                    # Apply color-aware transformations for paragraphs with colors
-                    print("***Para starting: ***", "\n")
-                    print("ORIGINAL PARAGRAPH:\n", para.text, "\n\n")
+            #         # Apply color-aware transformations for paragraphs with colors
+            #         print("***Para starting: ***", "\n")
+            #         print("ORIGINAL PARAGRAPH:\n", para.text, "\n\n")
 
-                    # Use color-aware replacement for colored paragraphs
-                    para.text = process_paragraph_with_color_aware_replacements(
-                        para, mappings
-                    )
-                    print("***MERGEFIELDS TRANSFORMED: ***\n", para.text, "\n\n")
+            #         # Use color-aware replacement for colored paragraphs
+            #         para.text = process_paragraph_with_color_aware_replacements(
+            #             para, mappings
+            #         )
+            #         print("***MERGEFIELDS TRANSFORMED: ***\n", para.text, "\n\n")
 
-                    # Apply IF transformations on the already processed text
-                    transformed_text = transform_text_with_single_if_condition(
-                        para.text, mappings
-                    )
-                    transformed_text = transform_text_with_if_betingelse(
-                        transformed_text, mappings
-                    )
-                    print("***IF SENTENCES TRANSFORMED***\n", transformed_text, "\n\n")
+            #         # Apply IF transformations on the already processed text
+            #         transformed_text = transform_text_with_single_if_condition(
+            #             para.text, mappings
+            #         )
+            #         transformed_text = transform_text_with_if_betingelse(
+            #             transformed_text, mappings
+            #         )
+            #         print("***IF SENTENCES TRANSFORMED***\n", transformed_text, "\n\n")
 
-                    if para.text != transformed_text:
-                        para.text = transformed_text
-                # else:
-                #     # For paragraphs without special coloring, use regular transformation
-                #     transformed_text = transform_text(para.text, mappings)
-                #     if para.text != transformed_text:
-                #         para.text = transformed_text
-                #         insert_mergefields(para)
+            #         if para.text != transformed_text:
+            #             para.text = transformed_text
+            # else:
+            #     # For paragraphs without special coloring, use regular transformation
+            #     transformed_text = transform_text(para.text, mappings)
+            #     if para.text != transformed_text:
+            #         para.text = transformed_text
+            #         insert_mergefields(para)
 
             # Convert all text-based MERGEFIELD syntax to actual Word merge fields
             print("***CONVERTING TEXT-BASED MERGEFIELDS TO ACTUAL MERGEFIELDS***")

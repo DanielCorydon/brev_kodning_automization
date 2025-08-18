@@ -37,6 +37,59 @@ def get_run_colors(run):
     return (text_color, highlight_color)
 
 
+def find_markers_across_runs(paragraphs):
+    """
+    Find markers like "If betingelse" that might span across multiple runs and paragraphs.
+    This function examines the text character by character to detect markers that might
+    be split across different formatting runs and paragraphs.
+
+    Args:
+        paragraphs: List of Word paragraph objects from python-docx
+    """
+    markers = {"if betingelse": "IF_BETINGELSE"}
+    # Build a continuous stream of text and mapping to (paragraph_idx, run_idx)
+    full_text = ""
+    char_to_run_map = []  # Each entry: (paragraph_idx, run_idx)
+    for p_idx, paragraph in enumerate(paragraphs):
+        for r_idx, run in enumerate(paragraph.runs):
+            run_text = run.text
+            full_text += run_text
+            char_to_run_map.extend([(p_idx, r_idx)] * len(run_text))
+    full_text_lower = full_text.lower()
+    for marker, marker_type in markers.items():
+        marker_lower = marker.lower()
+        marker_len = len(marker_lower)
+        for i in range(len(full_text_lower) - marker_len + 1):
+            if full_text_lower[i : i + marker_len] == marker_lower:
+                start_ok = i == 0 or not full_text[i - 1].isalpha()
+                end_ok = (
+                    i + marker_len >= len(full_text)
+                    or not full_text[i + marker_len].isalpha()
+                )
+                if start_ok and end_ok:
+                    print(f"FOUND: '{marker}' at position {i}-{i + marker_len - 1}")
+                    start_para, start_run = (
+                        char_to_run_map[i] if i < len(char_to_run_map) else (-1, -1)
+                    )
+                    end_para, end_run = (
+                        char_to_run_map[
+                            min(i + marker_len - 1, len(char_to_run_map) - 1)
+                        ]
+                        if char_to_run_map
+                        else (-1, -1)
+                    )
+                    if start_para == end_para and start_run == end_run:
+                        print(
+                            f"  -> Contained in paragraph {start_para}, run {start_run}"
+                        )
+                    else:
+                        print(
+                            f"  -> Spans paragraphs {start_para} to {end_para}, runs {start_run} to {end_run}"
+                        )
+                    actual_text = full_text[i : i + marker_len]
+                    print(f"  -> Actual text: '{actual_text}'")
+
+
 def find_title_match_with_mf_prefix(
     segment_text: str, mappings: dict, allow_mf_prefix_matching: bool = False
 ):
