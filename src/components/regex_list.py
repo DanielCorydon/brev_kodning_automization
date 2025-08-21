@@ -6,8 +6,8 @@ class RegexList:
         if regexes is None:
             # Example: two random regexes
             regexes = [
-                r'(?i)\s+if\s+betingelse\s+(.+?)\s*(?=[“”"])[“”"]([^“”"]*)[“”"]\s*else\s*[“”"]([^“”"]*)[“”"]',
-                r'(?i)Else til if betingelse\s+(.+?)\s*[“”"]([^“”"]*)[“”"]',
+                r'(?i)\s+if\s+betingelse\s+(.+?)\s*(?=[“”"])[“”"]([^“”"]*)[“”"]\s*else\s*[“”"]([^“”"]*)[“”"]'
+                # ,r'(?i)Else til if betingelse\s+(.+?)\s*[“”"]([^“”"]*)[“”"]',
             ]
         self._regexes = regexes
 

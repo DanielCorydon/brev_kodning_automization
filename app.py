@@ -5,10 +5,13 @@ import io
 import os
 import traceback
 from loguru import logger
+import json
 
 from src.components.mappings import load_default_mappings, load_uploaded_mappings
 from src.components.regex_list import RegexList
-from src.components.find_change_sentences import process_document_with_regexes
+from src.components.find_change_sentences import extract_and_format_regex_matches
+from src.components.create_field_text import create_field_text_from_regex_results
+from src.components.replace_field_text_new import DocumentTextReplacer
 from src.components.convert_text_fields import convert_document_fields
 
 
@@ -73,11 +76,12 @@ uploaded_docx = st.file_uploader(
 
 # --- Auto-load for testing if no upload ---
 if uploaded_docx is None:
-    default_docx_path = os.path.join("documents", "test_document_1.docx")
+    TEST_FILE_DOCS = "test_document_1.docx"
+    default_docx_path = os.path.join("documents", TEST_FILE_DOCS)
     if os.path.exists(default_docx_path):
         with open(default_docx_path, "rb") as f:
             uploaded_docx = io.BytesIO(f.read())
-            uploaded_docx.name = "Ukodet dokument fra ønsket brevdesgin.docx"
+            uploaded_docx.name = TEST_FILE_DOCS
 # --- End auto-load ---
 
 if uploaded_docx is not None:
@@ -86,18 +90,35 @@ if uploaded_docx is not None:
         print("\n**-----------Processing uploaded document...-----------**\n\n")
         doc_io = io.BytesIO(uploaded_docx.read())  # Convert uploaded file to BytesIO
         regex_list = RegexList()
-        process_document_with_regexes(doc_io, regex_list.get_regexes())
+        enhanced_results = extract_and_format_regex_matches(
+            doc_io, regex_list.get_regexes()
+        )
 
-        # doc_io = save_docx_to_bytes(doc)
+        # Print results in a readable format
 
-        # st.subheader("3. Download det genererede dokument")
-        # st.success("Dokumentet er genereret!")
-        # st.download_button(
-        #     label="Download Word-dokument",
-        #     data=doc_io,
-        #     file_name="dokument_med_fletfelter.docx",
-        #     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        # )
+        print(json.dumps(enhanced_results, indent=2, ensure_ascii=False))
+
+        enhanced_results_fields = create_field_text_from_regex_results(
+            enhanced_results, mappings
+        )
+
+        print(json.dumps(enhanced_results_fields, indent=2, ensure_ascii=False))
+
+        # call replace field text here
+        replacer = DocumentTextReplacer()
+        doc = Document(doc_io)
+        doc = replacer.replace_text_from_json(doc, enhanced_results_fields)
+        doc = convert_document_fields(doc)
+
+        doc_io = save_docx_to_bytes(doc)
+        st.subheader("4. Download det genererede dokument")
+        st.success("Dokumentet er genereret!")
+        st.download_button(
+            label="Download Word-dokument",
+            data=doc_io,
+            file_name="dokument_med_fletfelter.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
     except Exception as e:
         error_type = type(e).__name__
         tb = traceback.format_exc()

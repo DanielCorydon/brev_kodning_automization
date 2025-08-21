@@ -1,5 +1,5 @@
 """
-Module for finding text patterns across paragraphs in Word documents using regular expressions.
+Module for extracting and formatting regex matches from Word documents.
 """
 
 import re
@@ -17,22 +17,22 @@ logger = logging.getLogger(__name__)
 
 class DocumentRegexFinder:
     """
-    Class for finding and extracting text matching regex patterns across paragraphs in Word documents.
+    Finds and extracts text matching regex patterns from Word documents.
     """
 
     def __init__(self):
         """Initialize the DocumentRegexFinder."""
         pass
 
-    def extract_text_from_document(self, doc_input: Any) -> str:
+    def get_document_text(self, doc_input: Any) -> str:
         """
-        Extract all text from a Word document, preserving paragraph structure.
+        Returns all text from a Word document, including paragraphs and tables, as a single string.
 
         Args:
-            doc_input: Path to the Word document or a Document object
+            doc_input: Path to the Word document or a BytesIO object.
 
         Returns:
-            A string containing all document text with paragraphs separated by newlines
+            str: All document text with paragraphs separated by newlines.
         """
         try:
             if isinstance(doc_input, str):
@@ -62,88 +62,62 @@ class DocumentRegexFinder:
             logger.error(f"Error extracting text from document: {e}")
             raise
 
-    def find_patterns(
+    def find_regex_matches_in_document(
         self, doc_path: str, patterns: List[Pattern]
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Find all occurrences of the provided regex patterns in the document.
+        Finds all unique matches for each regex pattern in the document text.
 
         Args:
-            doc_path: Path to the Word document
-            patterns: List of compiled regex patterns to search for
+            doc_path: Path to the Word document.
+            patterns: List of compiled regex patterns.
 
         Returns:
-            A dictionary with pattern string as key and list of matches as values
+            dict: Pattern string as key, list of match dicts as value.
         """
-        # Extract all text from the document
-        doc_text = self.extract_text_from_document(doc_path)
-
+        doc_text = self.get_document_text(doc_path)
         results = {}
-        seen_full_texts: Set[str] = set()  # To track duplicates
-
-        # Process each regex pattern
+        seen_full_texts: Set[str] = set()
         for pattern in patterns:
             pattern_str = pattern.pattern
             results[pattern_str] = []
-
-            # Find all matches of the pattern in the text
             matches = pattern.finditer(doc_text)
-
             for match in matches:
                 full_text = match.group(0)
-
-                # Skip if this exact text has already been matched
                 if full_text in seen_full_texts:
                     continue
-
                 seen_full_texts.add(full_text)
-
-                # Extract the groups (if any)
-                groups = []
-                for i in range(1, len(match.groups()) + 1):
-                    if match.group(i) is not None:
-                        groups.append(match.group(i))
-
-                # Add the match data to results
+                groups = [
+                    match.group(i)
+                    for i in range(1, len(match.groups()) + 1)
+                    if match.group(i) is not None
+                ]
                 results[pattern_str].append({"fullText": full_text, "groups": groups})
-
         return results
 
 
-def process_document_with_regexes(
+def extract_and_format_regex_matches(
     doc_path: str, regex_list: List[str]
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Process a document with a list of regex patterns.
+    Extracts regex matches from a Word document.
 
     Args:
-        doc_path: Path to the Word document
-        regex_list: List of regex pattern strings
+        doc_path: Path to the Word document.
+        regex_list: List of regex pattern strings.
 
     Returns:
-        Dictionary with results for each pattern
+        dict: Results for each pattern.
     """
-    # Compile all regex patterns with re.DOTALL and re.UNICODE to handle Unicode characters
     compiled_patterns = []
     for regex_str in regex_list:
         try:
-            # re.DOTALL makes '.' match any character including newlines
-            # re.UNICODE ensures proper handling of Unicode characters
             pattern = re.compile(regex_str, re.DOTALL | re.UNICODE)
             compiled_patterns.append(pattern)
         except re.error as e:
             logger.error(f"Invalid regex pattern '{regex_str}': {e}")
-            # Continue with valid patterns
-
     finder = DocumentRegexFinder()
-    results = finder.find_patterns(doc_path, compiled_patterns)
-    # Print statement for demonstration
-    print("\n--- Regex Extraction Results ---\n")
-    print(f"Document: {doc_path}\n")
-    print(f"Regexes: {regex_list}\n")
-    print("Results:\n")
-    # Decode Unicode escape sequences for proper display of Danish letters
-    print(json.dumps(results, indent=2, ensure_ascii=False))
+    results = finder.find_regex_matches_in_document(doc_path, compiled_patterns)
     return results
 
 
@@ -156,12 +130,8 @@ if __name__ == "__main__":
             "Usage: python find_change_sentences.py <docx_file> <regex1> [regex2] ..."
         )
         sys.exit(1)
-
     doc_path = sys.argv[1]
     regexes = sys.argv[2:]
-
-    results = process_document_with_regexes(doc_path, regexes)
-
-    # Print results in a readable format
+    results = extract_and_format_regex_matches(doc_path, regexes)
     print("\n--- Processed Results ---\n")
     print(json.dumps(results, indent=2, ensure_ascii=False))
