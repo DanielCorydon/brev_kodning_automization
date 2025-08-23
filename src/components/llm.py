@@ -1,11 +1,18 @@
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from langchain_openai import AzureChatOpenAI
 from langgraph.graph import StateGraph, START, END
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Annotated
-from langchain_core.messages import AnyMessage, SystemMessage
+from langchain_core.messages import AnyMessage, SystemMessage, HumanMessage
 from langgraph.graph.message import add_messages
+from operator import add
+from docx import Document
+from src.components.replace_field_text import replace_text_from_json
+import json
+from typing import TypedDict
 
+
+# -------- AZURE AUTHENTICATION --------
 credential = DefaultAzureCredential(
     exclude_environment_credential=True,
     exclude_developer_cli_credential=True,
@@ -18,6 +25,8 @@ credential = DefaultAzureCredential(
 token_provider = get_bearer_token_provider(
     credential, "https://cognitiveservices.azure.com/.default"
 )
+
+
 llm = AzureChatOpenAI(
     azure_endpoint="https://oai02-aiserv.openai.azure.com/",
     api_version="2024-10-21",
@@ -25,34 +34,81 @@ llm = AzureChatOpenAI(
     # azure_deployment="gpt-4.1-nano",
     # azure_deployment="gpt-4.1",
     azure_deployment="gpt-4o-2024-08-06",
+    temperature=0.1,
 )
+tools = [replace_text_from_json]
+llm_with_tools = llm.bind_tools(tools, tool_choice="replace_text_from_json")
 
 
-class OverallState(BaseModel):
+class OverallState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
+    # document: Annotated[list[bytes], add]
 
 
-sys_msg = SystemMessage(
-    content="""Du modtager nu en tekst, hvor du får følgende opgave: Du vil se et mønster hvor der står "if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<et antal tegn>” Else ”<et antal tegn>”. Altså 2 citationstegn med noget indeni, og så 2 sitationstegn mere, med noget andet indeni, lad os kalde dem TEKST1 og TEKST2. Dette skal du transformere til følgende: { IF "J" { MERGEFIELD <MIDTERORD>}" " TEKST1" " TEKST2" Du skal kun ændre noget i teksten ved dette specifikke mønster. Du skal udelukkende returnere den ændrede tekst, intet andet."""
-)
+DEFAULT_SYSTEM_PROMPT = """Du er en hjælper, der skal hjælpe med at generere Word-fletfelter. Du vil modtage en bruger-prompt, og dernæst tekstindholdet af et dokument. Dit job er, ud fra brugerprompten, at identificere hvilke passager af dokument-teksten der skal udskiftes, og hvad de skal udskiftes med."""
 
 
-# --- Initial LLM ---
-def initial_llm(state: OverallState):
-    return {"messages": [llm.invoke(state.messages)]}
+def find_replacements_llm(state: OverallState):
+    output = llm_with_tools.invoke(state.messages)
+    return {"messages": [output]}
 
 
 graph_builder = StateGraph(OverallState)
 
 # *** NODES ***
 graph_builder.add_node(
-    "initial_llm",
-    initial_llm,
+    "llm_with_tools",
+    llm_with_tools,
 )
 
 # *** EDGES ***
-graph_builder.add_edge(START, "initial_llm")
-graph_builder.add_edge("initial_llm", END)
+graph_builder.add_edge(START, "llm_with_tools")
+graph_builder.add_edge("llm_with_tools", END)
 
 # memory = MemorySaver
 graph = graph_builder.compile()
+
+
+# def start_graph_llm(user_prompt: str, document_bytes: bytes):
+def start_graph_llm(user_prompt: str):
+
+    from docx import Document
+    import io
+
+    # doc = Document(io.BytesIO(document_bytes))
+    # document_text = "\n".join([para.text for para in doc.paragraphs])
+    initial_message = (
+        "\n---BRUGERPROMPT:---\n"
+        + user_prompt
+        + "\n---DOKUMENT-TEKST---\n"
+        # + document_text
+    )
+    # state = OverallState(
+    #     messages=[
+    #         SystemMessage(content=DEFAULT_SYSTEM_PROMPT),
+    #         HumanMessage(content=initial_message),
+    #     ],
+    #     document=[document_bytes],
+    # )
+    messages = [HumanMessage(content=initial_message)]
+    # graph.invoke({"messages": messages, "document": [document_bytes]})
+    val = graph.invoke(messages)
+    return
+
+
+def start_graph_llm_fake(user_prompt: str, document: Document):
+    class FakeLLMResponse:
+        def __init__(self, content):
+            self.content = content
+
+    replacements = [
+        {
+            "fullText": "If betingelse Borger enlig ved ældrecheck berettigelse”din” Else ”jeres”",
+            "replacementText": '{ IF "J" = "{ MERGEFIELD Borger enlig ved ældrecheck berettigelse }" " din" " jeres" }',
+        },
+        {
+            "fullText": "If betingelse Borger enlig ved ældrecheck berettigelse  ”din” Else ”jeres”",
+            "replacementText": '{ IF "J" = "{ MERGEFIELD Borger enlig ved ældrecheck berettigelse }" " din" " jeres" }',
+        },
+    ]
+    return FakeLLMResponse(json.dumps(replacements))

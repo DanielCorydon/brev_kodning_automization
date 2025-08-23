@@ -129,90 +129,55 @@ class FieldTextGenerator:
 
     def process_regex_results(
         self,
-        regex_results: Dict[str, List[Dict[str, Any]]],
+        regex_results: List[Dict[str, Any]],
         mapping: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> List[Dict[str, Any]]:
         """
         Process regex results and add replacement text for each match.
 
         Args:
-            regex_results: Dictionary with regex patterns as keys and match lists as values
+            regex_results: List of match dicts
             mapping: Optional dictionary mapping titles to keys
 
         Returns:
-            Enhanced dictionary with replacementText added to each match
+            Enhanced list with replacementText added to each match
         """
-        enhanced_results = {}
+        enhanced_results = []
 
-        for pattern, matches in regex_results.items():
-            enhanced_matches = []
+        for match in regex_results:
+            pattern = match.get("regex")
             processor = self.registry.get_processor(pattern)
-
+            enhanced_match = match.copy()
             if processor is None:
                 logger.warning(f"No processor found for pattern: {pattern}")
-                # Add original matches without replacement text
-                for match in matches:
-                    enhanced_match = match.copy()
-                    enhanced_match["replacementText"] = match[
-                        "fullText"
-                    ]  # Fallback to original
-                    enhanced_matches.append(enhanced_match)
+                enhanced_match["replacementText"] = match["fullText"]  # Fallback
             else:
-                # Process each match with the appropriate processor
-                for match in matches:
-                    enhanced_match = match.copy()
-                    try:
-                        replacement_text = processor.process_match(
-                            match["fullText"], match["groups"], mapping
-                        )
-                        enhanced_match["replacementText"] = replacement_text
-                    except Exception as e:
-                        logger.error(f"Error processing match: {e}")
-                        enhanced_match["replacementText"] = match[
-                            "fullText"
-                        ]  # Fallback
-
-                    enhanced_matches.append(enhanced_match)
-
-            enhanced_results[pattern] = enhanced_matches
+                try:
+                    replacement_text = processor.process_match(
+                        match["fullText"], match["groups"], mapping
+                    )
+                    enhanced_match["replacementText"] = replacement_text
+                except Exception as e:
+                    logger.error(f"Error processing match: {e}")
+                    enhanced_match["replacementText"] = match["fullText"]  # Fallback
+            enhanced_results.append(enhanced_match)
 
         return enhanced_results
 
 
 def create_field_text_from_regex_results(
-    regex_results: Dict[str, List[Dict[str, Any]]],
+    regex_results: List[Dict[str, Any]],
     mapping: Optional[Dict[str, str]] = None,
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> List[Dict[str, Any]]:
     """
     Main function to process regex results and add Word field replacement text.
 
     Args:
-        regex_results: Results from regex pattern matching
+        regex_results: List of match dicts
         mapping: Optional dictionary mapping titles to keys
 
     Returns:
-        Enhanced results with replacementText added to each match
+        Enhanced list with replacementText added to each match
     """
     generator = FieldTextGenerator()
     return generator.process_regex_results(regex_results, mapping)
-
-
-if __name__ == "__main__":
-    # Example usage with the provided JSON structure
-    example_input = {
-        r'(?i)\s+if\s+betingelse\s+(.+?)\s*(?=[""])["""]([^""]*)["""]\s*else\s*["""]([^""]*)["""]': [
-            {
-                "fullText": ' If betingelse Borger enlig ved ældrecheck berettigelse"din" Else "jeres"',
-                "groups": ["Borger enlig ved ældrecheck berettigelse", "din", "jeres"],
-            }
-        ]
-    }
-
-    # Example mapping (using a small subset for demonstration)
-    example_mapping = {"Borger enlig ved ældrecheck berettigelse": "ab-borger-er-enlig"}
-
-    result = create_field_text_from_regex_results(example_input, example_mapping)
-    print("Enhanced results:")
-    import json
-
-    print(json.dumps(result, indent=2, ensure_ascii=False))

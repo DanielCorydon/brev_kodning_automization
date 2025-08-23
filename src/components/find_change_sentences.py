@@ -64,7 +64,7 @@ class DocumentRegexFinder:
 
     def find_regex_matches_in_document(
         self, doc_path: str, patterns: List[Pattern]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    ) -> List[Dict[str, Any]]:
         """
         Finds all unique matches for each regex pattern in the document text.
 
@@ -73,14 +73,13 @@ class DocumentRegexFinder:
             patterns: List of compiled regex patterns.
 
         Returns:
-            dict: Pattern string as key, list of match dicts as value.
+            list: List of match dicts, each with regex, fullText, groups.
         """
         doc_text = self.get_document_text(doc_path)
-        results = {}
+        results = []
         seen_full_texts: Set[str] = set()
         for pattern in patterns:
             pattern_str = pattern.pattern
-            results[pattern_str] = []
             matches = pattern.finditer(doc_text)
             for match in matches:
                 full_text = match.group(0)
@@ -92,13 +91,15 @@ class DocumentRegexFinder:
                     for i in range(1, len(match.groups()) + 1)
                     if match.group(i) is not None
                 ]
-                results[pattern_str].append({"fullText": full_text, "groups": groups})
+                results.append(
+                    {"regex": pattern_str, "fullText": full_text, "groups": groups}
+                )
         return results
 
 
 def extract_and_format_regex_matches(
     doc_path: str, regex_list: List[str]
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> List[Dict[str, Any]]:
     """
     Extracts regex matches from a Word document.
 
@@ -107,7 +108,7 @@ def extract_and_format_regex_matches(
         regex_list: List of regex pattern strings.
 
     Returns:
-        dict: Results for each pattern.
+        list: List of match dicts.
     """
     compiled_patterns = []
     for regex_str in regex_list:
@@ -130,6 +131,11 @@ if __name__ == "__main__":
             "Usage: python find_change_sentences.py <docx_file> <regex1> [regex2] ..."
         )
         sys.exit(1)
+    doc_path = sys.argv[1]
+    regexes = sys.argv[2:]
+    results = extract_and_format_regex_matches(doc_path, regexes)
+    print("\n--- Processed Results ---\n")
+    print(json.dumps(results, indent=2, ensure_ascii=False))
     doc_path = sys.argv[1]
     regexes = sys.argv[2:]
     results = extract_and_format_regex_matches(doc_path, regexes)
