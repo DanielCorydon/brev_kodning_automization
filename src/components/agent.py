@@ -1,20 +1,17 @@
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from langchain_openai import AzureChatOpenAI
 from langgraph.graph import StateGraph, START, END
-from pydantic import BaseModel, Field
 from typing import Annotated
 from langchain_core.messages import AnyMessage, SystemMessage, HumanMessage
 from langgraph.graph.message import add_messages
 from operator import add
 from docx import Document
 from src.components.replace_field_text import (
-    replace_text_from_json,
+    replace_text,
 )
-from src.components.test_tools import replace_text_from_json_test
-
-import json
+from langgraph.graph import START, StateGraph
+from langgraph.prebuilt import ToolNode
 from typing import TypedDict
-from langgraph.graph import MessagesState
 import io
 from io import BytesIO
 
@@ -47,11 +44,11 @@ llm = AzureChatOpenAI(
 from langchain_openai import ChatOpenAI
 
 
-tools = [replace_text_from_json_test]
-llm_with_tools = llm.bind_tools(tools)
+tools = [replace_text]
+llm_with_tools = llm.bind_tools(tools, tool_choice="replace_text")
 # System message
 sys_msg = SystemMessage(
-    content="You are a helpful assistant tasked with performing arithmetic on a set of inputs, or NLP tasks on documents."
+    content="Du er en hjælpsom assistent der finder passager i dokumenter, og vurderer hvad de skal erstattes med, baseret på brugerens input. Brug værktøjerne til at hjælpe med dette."
 )
 
 
@@ -67,9 +64,6 @@ def assistant(state: OverallState):
     return {"messages": [llm_with_tools.invoke([sys_msg] + state["messages"])]}
 
 
-from langgraph.graph import START, StateGraph
-from langgraph.prebuilt import tools_condition, ToolNode
-
 # Graph
 builder = StateGraph(OverallState)
 
@@ -79,19 +73,10 @@ builder.add_node("tools", ToolNode(tools))
 
 # Define edges: these determine how the control flow moves
 builder.add_edge(START, "assistant")
-builder.add_conditional_edges(
-    "assistant",
-    # If the latest message (result) from assistant is a tool call -> tools_condition routes to tools
-    # If the latest message (result) from assistant is a not a tool call -> tools_condition routes to END
-    tools_condition,
-)
-builder.add_edge("tools", "assistant")
-react_graph = builder.compile()
+builder.add_edge("assistant", "tools")
+builder.add_edge("tools", END)
 
-# messages = [HumanMessage(content="Add 3 and 4.")]
-# messages = react_graph.invoke({"messages": messages})
-# for m in messages["messages"]:
-#     m.pretty_print()
+react_graph = builder.compile()
 
 
 def start_graph_llm(user_prompt: str, document_bytes: bytes):
@@ -118,4 +103,41 @@ def start_graph_llm(user_prompt: str, document_bytes: bytes):
     for m in output["messages"]:
         m.pretty_print()
 
-    return messages
+    return output
+
+
+def start_graph_llm_fake(user_prompt: str, document_bytes: bytes):
+    from langchain_core.messages import HumanMessage, AIMessage
+    from docx import Document
+    from io import BytesIO
+
+    # Simulate extracting document text
+    doc = Document(BytesIO(document_bytes))
+    document_text = "\n".join([para.text for para in doc.paragraphs])
+
+    # Create fake messages
+    initial_message = (
+        "\n---BRUGERPROMPT:---\n"
+        + user_prompt
+        + "\n---DOKUMENT-TEKST---\n"
+        + document_text
+    )
+    messages = [
+        HumanMessage(content=initial_message),
+        AIMessage(
+            content="Dette er et simuleret svar fra agenten. Ingen ændringer er foretaget."
+        ),
+    ]
+    output = {"messages": messages, "document": [document_bytes]}
+
+    # Output progression of all documents
+    for idx, doc_bytes in enumerate(output["document"]):
+        doc = Document(BytesIO(doc_bytes))
+        doc_text = "\n".join([para.text for para in doc.paragraphs])
+        print(
+            f"\n--- DOCUMENT {idx+1}/{len(output['document'])} ---\n{doc_text}\n--- END DOCUMENT {idx+1} ---\n"
+        )
+    for m in output["messages"]:
+        m.pretty_print()
+
+    return output

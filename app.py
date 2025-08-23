@@ -5,15 +5,9 @@ import io
 import os
 import traceback
 from loguru import logger
-
 from src.components.mappings import load_default_mappings, load_uploaded_mappings
-from src.components.regex_list import RegexList
-from src.components.find_change_sentences import extract_and_format_regex_matches
-from src.components.create_field_text import create_field_text_from_regex_results
+from src.components.agent import start_graph_llm, start_graph_llm_fake
 from src.components.convert_text_fields import convert_document_fields
-
-# from src.components.llm import start_graph_llm
-from src.components.llm_copy import react_graph, start_graph_llm
 
 
 st.set_page_config(page_title="Brevkoder-automater", layout="wide")
@@ -86,64 +80,40 @@ if uploaded_docx is None:
             uploaded_docx.name = TEST_FILE_DOCS
 # --- End auto-load ---
 
-DEFAULT_SYSTEM_PROMPT = 'Du vil i teksten se et mønster hvor der står "if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<et antal tegn>” Else ”<et antal tegn>”. Altså 2 citationstegn med noget indeni, og så 2 citationstegn mere, med noget andet indeni, lad os kalde dem TEKST1 og TEKST2. Dette skal du transformere til følgende: { IF "J" { MERGEFIELD <MIDTERORD>}" " TEKST1" " TEKST2"'
+DEFAULT_SYSTEM_PROMPT = (
+    'Du vil i teksten se et mønster hvor der står "if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<TEKST1>” Else ”<TEKST2>”. Altså 2 dobbelt anførselstegn med noget indeni, og så 2 dobbelt anførselstegn mere, med noget andet indeni. Her kalder vi dem TEKST1 og TEKST2, men du skal bruge det der står i teksten. '
+    'Den første tekst-passage der passer på ovenstående mønster, skal erstattes med følgende: { IF "J" { MERGEFIELD <MIDTERORD>}" " TEKST1" " TEKST2" }'
+)
 
 st.subheader("Ekstra input til LLM (sendes som HumanMessage)")
 extra_human_input = st.text_area(
     "Indtast ekstra tekst til LLM her:",
-    value="Replace IF with TESTSUCCES in the document",
-    height=100,
+    value=DEFAULT_SYSTEM_PROMPT,
+    height=200,
 )
 
 if uploaded_docx is not None:
     # Read the uploaded Word document and generate output immediately
     try:
         logger.debug("\n**-----------Processing uploaded document...-----------**\n\n")
-        # regex_list = RegexList()
-        # # Extract regex matches from the document
-        # enhanced_results = extract_and_format_regex_matches(
-        #     doc_io, regex_list.get_regexes()
-        # )
-
-        # print(json.dumps(enhanced_results, indent=2, ensure_ascii=False))
-
-        # # Create fields from enhanced results
-        # enhanced_results_fields = create_field_text_from_regex_results(
-        #     enhanced_results, mappings
-        # )
-
-        # print(json.dumps(enhanced_results_fields, indent=2, ensure_ascii=False))
-
         doc_bytes = uploaded_docx.read()
-
-        # llm_json_output = process_document_with_llm_fake(
-        # llm_json_output_raw = start_graph_llm(
-        #     user_prompt=extra_human_input, document_bytes=doc_bytes
-        # )
-        # llm_json_output_raw = start_graph_llm(user_prompt=extra_human_input)
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        messages = start_graph_llm(
+        output = start_graph_llm_fake(
             user_prompt=extra_human_input, document_bytes=doc_bytes
         )
-        print("SUCCESRONI")
+        doc_bytes_out = output["document"][-1]
+        doc_io = io.BytesIO(doc_bytes_out)
+        doc = Document(doc_io)  # <-- Fix: load Document object
+        doc = convert_document_fields(doc)  # <-- Pass Document, not BytesIO
 
-        # messages = [HumanMessage(content="Add 3 and 4.")]
-        # messages = react_graph.invoke({"messages": messages})
-        # for m in messages["messages"]:
-        #     m.pretty_print()
-
-        # doc = convert_document_fields(doc)
-
-        # doc_io = save_docx_to_bytes(doc)
-        # st.subheader("4. Download det genererede dokument")
-        # st.success("Dokumentet er genereret!")
-        # st.download_button(
-        #     label="Download Word-dokument",
-        #     data=doc_io,
-        #     file_name="dokument_med_fletfelter.docx",
-        #     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        # )
+        doc_io = save_docx_to_bytes(doc)
+        st.subheader("4. Download det genererede dokument")
+        st.success("Dokumentet er genereret!")
+        st.download_button(
+            label="Download Word-dokument",
+            data=doc_io,
+            file_name="dokument_med_fletfelter.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
     except Exception as e:
         error_type = type(e).__name__
         tb = traceback.format_exc()

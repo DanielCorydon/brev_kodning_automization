@@ -1,16 +1,7 @@
-"""
-Module for replacing text in Word documents based on JSON patterns while preserving styling.
-
-This module receives a Word document and a JSON object containing regex patterns
-and replacement mappings, then replaces fullText occurrences with replacementText
-while preserving the original styling from runs.
-"""
-
 from docx import Document
 from io import BytesIO
 import json
 import re
-import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from langchain_core.tools import tool
@@ -20,6 +11,19 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from operator import add
+from typing import Annotated
+from langgraph.types import Command
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import tool, InjectedToolCallId
+from langchain_core.messages import AnyMessage, SystemMessage, HumanMessage
+from langgraph.graph.message import add_messages
+from loguru import logger
+
+
+class CustomState(AgentState):
+    # The user_name field in short-term state
+    messages: Annotated[list[AnyMessage], add_messages]
+    document: Annotated[list[bytes], add]
 
 
 class CustomState(AgentState):
@@ -27,56 +31,61 @@ class CustomState(AgentState):
     document: Annotated[list[bytes], add]
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-
 @dataclass
 class ReplacementMatch:
     """Data class to store information about a text match and its replacement."""
 
-    full_text: str
+    original_text: str
     replacement_text: str
     start_pos: int
     end_pos: int
 
 
 @tool
-def replace_text_from_json(
+def replace_text(
     state: Annotated[CustomState, InjectedState],
-    doc_bytes: bytes,
-    json_data: List[Dict],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    replacement_pairs: List[Dict],
 ) -> Document:
     """
-    Replace text in document based on JSON pattern data.
+    Replace text in document based on replacement pairs.
 
     Args:
-        doc_bytes: Word document as bytes
-        json_data: List of match dicts
+        replacement_pairs: List of dictionaries, each with:
+            - "originalText": The text to search for and replace.
+            - "replacementText": The text to use as the replacement.
 
     Returns:
         Modified document object
     """
-    logger.info("Starting text replacement process")
 
     # Load the document from bytes
-    doc = Document(BytesIO(doc_bytes))
+    doc = Document(BytesIO(state.get("document")[-1]))
 
     # Process all paragraphs in the document
     for paragraph in doc.paragraphs:
-        _process_paragraph(paragraph, json_data)
+        _process_paragraph(paragraph, replacement_pairs)
 
     # Process all tables in the document
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for paragraph in cell.paragraphs:
-                    _process_paragraph(paragraph, json_data)
-
+                    _process_paragraph(paragraph, replacement_pairs)
+    output_stream = BytesIO()
+    doc.save(output_stream)
     logger.info("Text replacement process complete")
-    return doc
+    return Command(
+        update={
+            "messages": [
+                ToolMessage(
+                    f"Tekst er nu blevet ændret fra",
+                    tool_call_id=tool_call_id,
+                )
+            ],
+            "document": [output_stream.getvalue()],
+        }
+    )
 
 
 def _process_paragraph(paragraph, json_data: List[Dict]):
@@ -108,7 +117,7 @@ def _process_paragraph(paragraph, json_data: List[Dict]):
         # Apply replacements one by one
         for i, match in enumerate(all_matches):
             logger.debug(
-                f"Applying match {i+1}/{len(all_matches)}: '{match.full_text}' -> '{match.replacement_text}'"
+                f"Applying match {i+1}/{len(all_matches)}: '{match.original_text}' -> '{match.replacement_text}'"
             )
             _apply_replacement(paragraph, match)
 
@@ -126,18 +135,18 @@ def _find_all_matches(
 
     # Iterate through each match object in the JSON data
     for replacement_data in json_data:
-        full_text = replacement_data.get("fullText", "")
+        original_text = replacement_data.get("originalText", "")
         replacement_text = replacement_data.get("replacementText", "")
 
-        if not full_text:
+        if not original_text:
             continue
 
-        # Find all occurrences of the fullText in the paragraph
-        text_matches = _find_text_occurrences(paragraph_text, full_text)
+        # Find all occurrences of the originalText in the paragraph
+        text_matches = _find_text_occurrences(paragraph_text, original_text)
 
         for start_pos, end_pos in text_matches:
             match = ReplacementMatch(
-                full_text=full_text,
+                original_text=original_text,
                 replacement_text=replacement_text,
                 start_pos=start_pos,
                 end_pos=end_pos,
@@ -393,12 +402,12 @@ def _apply_replacement(paragraph, match: ReplacementMatch):
     # For replacements done in reverse order, we need to search for the actual text
     # instead of relying on fixed positions
     actual_match_pos = _find_actual_match_position(
-        current_text, match.full_text, match.start_pos
+        current_text, match.original_text, match.start_pos
     )
 
     if actual_match_pos is None:
         logger.warning(
-            f"Could not find text '{match.full_text}' in current paragraph text"
+            f"Could not find text '{match.original_text}' in current paragraph text"
         )
         return
 
@@ -586,7 +595,7 @@ def process_document_from_json_file(
         json_data = json.load(f)
 
     # Process the document
-    modified_doc = replace_text_from_json(doc, json_data)
+    modified_doc = replace_text(doc, json_data)
 
     # Save the modified document
     modified_doc.save(output_path)
@@ -616,7 +625,7 @@ def process_document_from_json_string(
     json_data = json.loads(json_string)
 
     # Process the document
-    modified_doc = replace_text_from_json(doc, json_data)
+    modified_doc = replace_text(doc, json_data)
 
     # Save the modified document
     modified_doc.save(output_path)
@@ -636,7 +645,7 @@ def replace_text_in_document(doc: Document, json_data: List[Dict]) -> Document:
     Returns:
         Modified document object
     """
-    return replace_text_from_json(doc, json_data)
+    return replace_text(doc, json_data)
 
 
 if __name__ == "__main__":

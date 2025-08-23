@@ -26,14 +26,8 @@ class CustomState(AgentState):
     document: Annotated[list[bytes], add]
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-
 @tool
-def replace_text_from_json_test(
+def replace_text(
     state: Annotated[CustomState, InjectedState],
     replace: str,
     replacement: str,
@@ -62,7 +56,10 @@ def replace_text_from_json_test(
     return Command(
         update={
             "messages": [
-                ToolMessage(f"Replaced text in document", tool_call_id=tool_call_id)
+                ToolMessage(
+                    f"Tekst er nu blevet ændret fra '{replace}' til '{replacement}'",
+                    tool_call_id=tool_call_id,
+                )
             ],
             "document": [output_stream.getvalue()],
         }
