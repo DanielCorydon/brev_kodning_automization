@@ -132,7 +132,7 @@ if uploaded_docx is not None:
 
         # Apply each non-empty prompt in order
         for prompt in [p for p in st.session_state.prompts if p.strip()]:
-            output = start_graph_llm(user_prompt=prompt, document_bytes=doc_bytes)
+            output = start_graph_llm_fake(user_prompt=prompt, document_bytes=doc_bytes)
             doc_bytes = output["document"][-1]
         doc_io = io.BytesIO(doc_bytes)
         doc = Document(doc_io)
