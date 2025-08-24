@@ -1,21 +1,14 @@
+from docx import Document
 import streamlit as st
 import pandas as pd
 import io
 import os
+import traceback
+from loguru import logger
 from src.components.mappings import load_default_mappings, load_uploaded_mappings
-from src.components.process_document import (
-    load_docx,
-    save_docx_to_bytes,
-    extract_colors_from_paragraph,
-    process_paragraph_with_color_aware_replacements,
-    insert_actual_mergefields,  # Added new import
-    remove_comments_from_docx,  # Added new import
-)
-from src.components.find_fields import (
-    transform_text_with_single_if_condition,
-    transform_text_with_if_betingelse,
-    replace_titles_with_mergefields,
-)
+from src.components.agent import start_graph_llm, start_graph_llm_fake
+from src.components.convert_text_fields import convert_document_fields
+
 
 st.set_page_config(page_title="Brevkoder-automater", layout="wide")
 st.title("Brevkoder-automater")
@@ -60,113 +53,111 @@ elif default_mappings:
 else:
     st.info("Upload venligst en Excel-fil med koblinger.")
 
-if mappings:
-    # Add text testing section
-    st.subheader("1.5. Test transformation på tekst")
-    st.write(
-        "Du kan teste transformationen på en tekststreng her før du uploader et dokument."
+
+def save_docx_to_bytes(doc):
+    """Save a Document object to BytesIO."""
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
+
+
+# Add file uploader for Word template and generate on upload
+st.subheader("2. Upload dit ukodede brev og generér kodet version")
+uploaded_docx = st.file_uploader(
+    "Upload en .docx-fil som skabelon (dokumentet genereres automatisk ved upload)",
+    type=["docx"],
+)
+
+# --- Auto-load for testing if no upload ---
+if uploaded_docx is None:
+    # TEST_FILE_DOCS = "Ukodet dokument fra ønsket brevdesgin.docx"
+    TEST_FILE_DOCS = "test_document_1.docx"
+    default_docx_path = os.path.join("documents", TEST_FILE_DOCS)
+    if os.path.exists(default_docx_path):
+        with open(default_docx_path, "rb") as f:
+            uploaded_docx = io.BytesIO(f.read())
+            uploaded_docx.name = TEST_FILE_DOCS
+# --- End auto-load ---
+
+PROMPT_1 = 'Du vil i teksten se et mønster hvor der står "if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<TEKST1>” Else ”<TEKST2>”. Altså 2 dobbelt anførselstegn med noget tekst indeni, og så 2 dobbelt anførselstegn mere, med noget andet indeni. Her kalder vi dem TEKST1 og TEKST2, men du skal bruge det der står i teksten. Alle tekst-passager der passer på ovenstående mønster, skal erstattes med følgende: { IF "J" = { MERGEFIELD <MIDTERORD>}" " TEKST1" " TEKST2" }'
+PROMPT_2 = 'Du vil i teksten se et mønster hvor der står "Else til if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<TEKST>”. Altså 2 dobbelt anførselstegn med noget tekst indeni. Alle tekst-passager der passer på ovenstående mønster, skal erstattes med følgende: { IF "N" = { MERGEFIELD <MIDTERORD>}" " TEKST" }'
+
+# --- Prompt management ---
+if "prompts" not in st.session_state:
+    st.session_state.prompts = [PROMPT_1, PROMPT_2]
+
+st.subheader("Ekstra input til LLM (sendes som HumanMessage)")
+
+
+def add_prompt():
+    st.session_state.prompts.append("")
+
+
+def remove_prompt(idx):
+    if len(st.session_state.prompts) > 1:
+        st.session_state.prompts.pop(idx)
+
+
+for idx, prompt in enumerate(st.session_state.prompts):
+    st.session_state.prompts[idx] = st.text_area(
+        f"Prompt #{idx+1}",
+        value=prompt,
+        key=f"prompt_{idx}",
+        height=200,
     )
+    cols = st.columns([1, 1])
+    with cols[0]:
+        if st.button("Fjern", key=f"remove_{idx}"):
+            remove_prompt(idx)
+            st.rerun()
+    with cols[1]:
+        if idx == len(st.session_state.prompts) - 1:
+            if st.button("Tilføj prompt", key=f"add_{idx}"):
+                add_prompt()
+                st.rerun()
 
-    # Default test text
-    default_test_text = """Vi har gjort din Else til if betingelse Borger enlig ved ældrecheck berettigelse  ”og din ægtefælle/samlevers” likvide formue op på baggrund af If betingelse Borger enlig ved ældrecheck berettigelse ”din” Else ”jeres” årsopgørelse for Årstal forrige år fra Skattestyrelsen.
-
-Din Else til if betingelse Borger enlig ved ældrecheck berettigelse”og din ægtefælle/samlevers” likvide formue har i Årstal indeværende år   været større end formuegrænsen. Formuegrænsen var Formuegrænse   kr. Det betyder, at du skal betale ældrechecken tilbage.
-"""
-
-    # Text input for testing
-    test_text = st.text_area(
-        "Indsæt tekst til test:",
-        value="",
-        height=150,
-        placeholder='Eksempel: IF Betingelse KundeType "Privatkunde" ELSE "Erhvervskunde"',
-    )
-
-    # Function to transform text
-    def transform_text(text, mappings):
-        """
-        Applies a series of transformations to the given text using the provided mappings.
-        """
-        transformed_text = transform_text_with_single_if_condition(text, mappings)
-        transformed_text = transform_text_with_if_betingelse(transformed_text, mappings)
-        transformed_text = replace_titles_with_mergefields(transformed_text, mappings)
-        return transformed_text
-
-    # Button to transform text
-    if st.button("Transformér tekst"):
-        if test_text.strip():
-            # Apply transformations using the new function
-            transformed_text = transform_text(test_text, mappings)
-
-            st.subheader("Resultat:")
-            st.text_area(
-                "Transformeret tekst (kan kopieres):",
-                value=transformed_text,
-                height=150,
-                key="result_text",
+if uploaded_docx is not None:
+    try:
+        logger.debug("\n**-----------Processing uploaded document...-----------**\n")
+        doc_bytes = uploaded_docx.read()
+        doc_len_check = Document(io.BytesIO(doc_bytes))
+        total_length = sum(len(para.text) for para in doc_len_check.paragraphs)
+        print(f"Total length of document text is {total_length}")
+        if total_length > 10000:
+            st.error(
+                "Document text is too long. It would be too expensive to pass through LLM"
             )
+            raise ValueError("Document text is too long.")
 
-            # Show if any changes were made
-            if test_text != transformed_text:
-                st.success("✅ Teksten blev transformeret!")
-            else:
-                st.info("ℹ️ Ingen 'IF Betingelse' mønstre fundet i teksten.")
-        else:
-            st.warning("Indsæt venligst noget tekst til transformation.")
+        # Apply each non-empty prompt in order
+        for prompt in [p for p in st.session_state.prompts if p.strip()]:
+            output = start_graph_llm_fake(user_prompt=prompt, document_bytes=doc_bytes)
+            doc_bytes = output["document"][-1]
+        doc_io = io.BytesIO(doc_bytes)
+        doc = Document(doc_io)
+        doc = convert_document_fields(doc)
 
-    # Add file uploader for Word template and generate on upload
-    st.subheader("2. Upload dit ukodede brev og generér kodet version")
-    uploaded_docx = st.file_uploader(
-        "Upload en .docx-fil som skabelon (dokumentet genereres automatisk ved upload)",
-        type=["docx"],
-    )
-
-    if uploaded_docx is not None:
-        # Read the uploaded Word document and generate output immediately
-        try:
-            doc_template = load_docx(uploaded_docx)
-
-            # Remove comments from the document
-            doc_template = remove_comments_from_docx(doc_template)
-
-            # For each paragraph, first replace titles, then apply IF Betingelse transformation
-            for para in doc_template.paragraphs:
-
-                # Check for coloration in the paragraph
-                text_colors, background_colors = extract_colors_from_paragraph(para)
-                if text_colors or background_colors:
-                    # Apply color-aware transformations for paragraphs with colors
-                    para.text = process_paragraph_with_color_aware_replacements(
-                        para, mappings
-                    )
-
-                    # Apply IF transformations on the already processed text
-                    transformed_text = transform_text_with_single_if_condition(
-                        para.text, mappings
-                    )
-                    transformed_text = transform_text_with_if_betingelse(
-                        transformed_text, mappings
-                    )
-
-                    if para.text != transformed_text:
-                        para.text = transformed_text
-
-            # Convert all text-based MERGEFIELD syntax to actual Word merge fields
-            for para in doc_template.paragraphs:
-                insert_actual_mergefields(para)
-
-            doc_io = save_docx_to_bytes(doc_template)
-            st.subheader("3. Download det genererede dokument")
-            st.success("Dokumentet er genereret!")
-            st.download_button(
-                label="Download Word-dokument",
-                data=doc_io,
-                file_name="dokument_med_fletfelter.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-        except Exception as e:
-            st.error(f"Fejl ved behandling af Word-dokument: {str(e)}")
-    else:
-        st.info("Upload venligst en Word-skabelon.")
+        doc_io = save_docx_to_bytes(doc)
+        st.subheader("4. Download det genererede dokument")
+        st.success("Dokumentet er genereret!")
+        st.download_button(
+            label="Download Word-dokument",
+            data=doc_io,
+            file_name="dokument_med_fletfelter.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    except Exception as e:
+        error_type = type(e).__name__
+        tb = traceback.format_exc()
+        logger.debug(
+            f"Fejl ved behandling af Word-dokument:\n\n"
+            f"Type: {error_type}\n"
+            f"Detaljer: {str(e)}\n\n"
+            f"Traceback:\n{tb}"
+        )
+else:
+    st.info("Upload venligst en Word-skabelon.")
 
 # Add instructions
 with st.expander("Hjælp & Vejledning"):
