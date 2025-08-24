@@ -121,9 +121,18 @@ if uploaded_docx is not None:
     try:
         logger.debug("\n**-----------Processing uploaded document...-----------**\n")
         doc_bytes = uploaded_docx.read()
+        doc_len_check = Document(io.BytesIO(doc_bytes))
+        total_length = sum(len(para.text) for para in doc_len_check.paragraphs)
+        print(f"Total length of document text is {total_length}")
+        if total_length > 10000:
+            st.error(
+                "Document text is too long. It would be too expensive to pass through LLM"
+            )
+            raise ValueError("Document text is too long.")
+
         # Apply each non-empty prompt in order
         for prompt in [p for p in st.session_state.prompts if p.strip()]:
-            output = start_graph_llm(user_prompt=prompt, document_bytes=doc_bytes)
+            output = start_graph_llm_fake(user_prompt=prompt, document_bytes=doc_bytes)
             doc_bytes = output["document"][-1]
         doc_io = io.BytesIO(doc_bytes)
         doc = Document(doc_io)
