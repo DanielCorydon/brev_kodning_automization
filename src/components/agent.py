@@ -1,4 +1,3 @@
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from langchain_openai import AzureChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from typing import Annotated
@@ -15,21 +14,15 @@ from typing import TypedDict
 import io
 from io import BytesIO
 
+from src.components.azure_auth import (
+    get_token_provider_default,
+    get_token_provider_streamlit_secrets,
+)
 
 # -------- AZURE AUTHENTICATION --------
-credential = DefaultAzureCredential(
-    exclude_environment_credential=True,
-    exclude_developer_cli_credential=True,
-    exclude_workload_identity_credential=True,
-    exclude_managed_identity_credential=True,
-    exclude_visual_studio_code_credential=True,
-    exclude_shared_token_cache_credential=True,
-    exclude_interactive_browser_credential=True,
-)
-token_provider = get_bearer_token_provider(
-    credential, "https://cognitiveservices.azure.com/.default"
-)
-
+token_provider = get_token_provider_streamlit_secrets()
+# If you want to use Streamlit secrets authentication, use:
+# token_provider = get_token_provider_streamlit_secrets()
 
 llm = AzureChatOpenAI(
     azure_endpoint="https://oai02-aiserv.openai.azure.com/",
