@@ -79,7 +79,7 @@ def replace_text(
         update={
             "messages": [
                 ToolMessage(
-                    f"Tekst er nu blevet ændret fra",
+                    f"Alle tekstbidder er nu blevet erstattet i dokumentet.",
                     tool_call_id=tool_call_id,
                 )
             ],

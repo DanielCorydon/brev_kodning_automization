@@ -41,9 +41,6 @@ llm = AzureChatOpenAI(
     temperature=0.1,
 )
 
-from langchain_openai import ChatOpenAI
-
-
 tools = [replace_text]
 llm_with_tools = llm.bind_tools(tools, tool_choice="replace_text")
 # System message
@@ -80,6 +77,7 @@ react_graph = builder.compile()
 
 
 def start_graph_llm(user_prompt: str, document_bytes: bytes):
+    print(f"\n STARTING GRAPH LLM PROCESSING...")
     doc = Document(io.BytesIO(document_bytes))
     document_text = "\n".join([para.text for para in doc.paragraphs])
 
@@ -107,6 +105,8 @@ def start_graph_llm(user_prompt: str, document_bytes: bytes):
 
 
 def start_graph_llm_fake(user_prompt: str, document_bytes: bytes):
+    print(f"\n STARTING FAKE GRAPH LLM PROCESSING...")
+
     from langchain_core.messages import HumanMessage, AIMessage
     from docx import Document
     from io import BytesIO
@@ -129,15 +129,5 @@ def start_graph_llm_fake(user_prompt: str, document_bytes: bytes):
         ),
     ]
     output = {"messages": messages, "document": [document_bytes]}
-
-    # Output progression of all documents
-    for idx, doc_bytes in enumerate(output["document"]):
-        doc = Document(BytesIO(doc_bytes))
-        doc_text = "\n".join([para.text for para in doc.paragraphs])
-        print(
-            f"\n--- DOCUMENT {idx+1}/{len(output['document'])} ---\n{doc_text}\n--- END DOCUMENT {idx+1} ---\n"
-        )
-    for m in output["messages"]:
-        m.pretty_print()
 
     return output

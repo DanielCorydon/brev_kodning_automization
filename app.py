@@ -80,30 +80,54 @@ if uploaded_docx is None:
             uploaded_docx.name = TEST_FILE_DOCS
 # --- End auto-load ---
 
-DEFAULT_SYSTEM_PROMPT = (
-    'Du vil i teksten se et mønster hvor der står "if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<TEKST1>” Else ”<TEKST2>”. Altså 2 dobbelt anførselstegn med noget indeni, og så 2 dobbelt anførselstegn mere, med noget andet indeni. Her kalder vi dem TEKST1 og TEKST2, men du skal bruge det der står i teksten. '
-    'Den første tekst-passage der passer på ovenstående mønster, skal erstattes med følgende: { IF "J" { MERGEFIELD <MIDTERORD>}" " TEKST1" " TEKST2" }'
-)
+PROMPT_1 = 'Du vil i teksten se et mønster hvor der står "if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<TEKST1>” Else ”<TEKST2>”. Altså 2 dobbelt anførselstegn med noget tekst indeni, og så 2 dobbelt anførselstegn mere, med noget andet indeni. Her kalder vi dem TEKST1 og TEKST2, men du skal bruge det der står i teksten. Alle tekst-passager der passer på ovenstående mønster, skal erstattes med følgende: { IF "J" = { MERGEFIELD <MIDTERORD>}" " TEKST1" " TEKST2" }'
+PROMPT_2 = 'Du vil i teksten se et mønster hvor der står "Else til if betingelse" (case insensitive), <en arbitrær mængde ord - lad os kalde dem MIDTERORD>, og så på et tidspunkt vil der stå ”<TEKST>”. Altså 2 dobbelt anførselstegn med noget tekst indeni. Alle tekst-passager der passer på ovenstående mønster, skal erstattes med følgende: { IF "N" = { MERGEFIELD <MIDTERORD>}" " TEKST" }'
+
+# --- Prompt management ---
+if "prompts" not in st.session_state:
+    st.session_state.prompts = [PROMPT_1, PROMPT_2]
 
 st.subheader("Ekstra input til LLM (sendes som HumanMessage)")
-extra_human_input = st.text_area(
-    "Indtast ekstra tekst til LLM her:",
-    value=DEFAULT_SYSTEM_PROMPT,
-    height=200,
-)
+
+
+def add_prompt():
+    st.session_state.prompts.append("")
+
+
+def remove_prompt(idx):
+    if len(st.session_state.prompts) > 1:
+        st.session_state.prompts.pop(idx)
+
+
+for idx, prompt in enumerate(st.session_state.prompts):
+    st.session_state.prompts[idx] = st.text_area(
+        f"Prompt #{idx+1}",
+        value=prompt,
+        key=f"prompt_{idx}",
+        height=200,
+    )
+    cols = st.columns([1, 1])
+    with cols[0]:
+        if st.button("Fjern", key=f"remove_{idx}"):
+            remove_prompt(idx)
+            st.rerun()
+    with cols[1]:
+        if idx == len(st.session_state.prompts) - 1:
+            if st.button("Tilføj prompt", key=f"add_{idx}"):
+                add_prompt()
+                st.rerun()
 
 if uploaded_docx is not None:
-    # Read the uploaded Word document and generate output immediately
     try:
-        logger.debug("\n**-----------Processing uploaded document...-----------**\n\n")
+        logger.debug("\n**-----------Processing uploaded document...-----------**\n")
         doc_bytes = uploaded_docx.read()
-        output = start_graph_llm_fake(
-            user_prompt=extra_human_input, document_bytes=doc_bytes
-        )
-        doc_bytes_out = output["document"][-1]
-        doc_io = io.BytesIO(doc_bytes_out)
-        doc = Document(doc_io)  # <-- Fix: load Document object
-        doc = convert_document_fields(doc)  # <-- Pass Document, not BytesIO
+        # Apply each non-empty prompt in order
+        for prompt in [p for p in st.session_state.prompts if p.strip()]:
+            output = start_graph_llm_fake(user_prompt=prompt, document_bytes=doc_bytes)
+            doc_bytes = output["document"][-1]
+        doc_io = io.BytesIO(doc_bytes)
+        doc = Document(doc_io)
+        doc = convert_document_fields(doc)
 
         doc_io = save_docx_to_bytes(doc)
         st.subheader("4. Download det genererede dokument")
