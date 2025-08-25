@@ -6,6 +6,8 @@ import os
 import traceback
 from loguru import logger
 from src.components.mappings import load_default_mappings, load_uploaded_mappings
+from src.components.title_key_fetcher import title_key_fetcher
+from src.components.replace_field_text_base import replace_text
 from src.components.agent import start_graph_llm, start_graph_llm_fake
 from src.components.convert_text_fields import convert_document_fields
 
@@ -117,7 +119,31 @@ for idx, prompt in enumerate(st.session_state.prompts):
                 add_prompt()
                 st.rerun()
 
-if uploaded_docx is not None:
+
+# --- Button to trigger document processing ---
+st.subheader("3. Generér kodet dokument")
+
+# Check requirements for enabling the button
+has_word_file = uploaded_docx is not None
+has_nonempty_prompt = any(p.strip() for p in st.session_state.prompts)
+button_disabled = not (has_word_file and has_nonempty_prompt)
+
+# Tooltip for disabled button
+button_tooltip = ""
+if not has_word_file and not has_nonempty_prompt:
+    button_tooltip = "Upload en Word-fil og skriv mindst én prompt for at aktivere."
+elif not has_word_file:
+    button_tooltip = "Upload en Word-fil for at aktivere."
+elif not has_nonempty_prompt:
+    button_tooltip = "Skriv mindst én prompt for at aktivere."
+
+generate_clicked = st.button(
+    "Generér dokument",
+    disabled=button_disabled,
+    help=button_tooltip if button_disabled else None,
+)
+
+if generate_clicked and has_word_file and has_nonempty_prompt:
     try:
         logger.debug("\n**-----------Processing uploaded document...-----------**\n")
         doc_bytes = uploaded_docx.read()
@@ -130,9 +156,12 @@ if uploaded_docx is not None:
             )
             raise ValueError("Document text is too long.")
 
+        titel_key_exchanges = title_key_fetcher(mappings, doc_bytes)
+        doc_bytes = replace_text(doc_bytes, titel_key_exchanges)
+
         # Apply each non-empty prompt in order
         for prompt in [p for p in st.session_state.prompts if p.strip()]:
-            output = start_graph_llm_fake(user_prompt=prompt, document_bytes=doc_bytes)
+            output = start_graph_llm(user_prompt=prompt, document_bytes=doc_bytes)
             doc_bytes = output["document"][-1]
         doc_io = io.BytesIO(doc_bytes)
         doc = Document(doc_io)
@@ -156,8 +185,10 @@ if uploaded_docx is not None:
             f"Detaljer: {str(e)}\n\n"
             f"Traceback:\n{tb}"
         )
-else:
+elif not has_word_file:
     st.info("Upload venligst en Word-skabelon.")
+elif not has_nonempty_prompt:
+    st.info("Skriv mindst én prompt for at kunne generere dokumentet.")
 
 # Add instructions
 with st.expander("Hjælp & Vejledning"):

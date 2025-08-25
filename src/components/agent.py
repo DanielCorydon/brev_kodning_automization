@@ -85,14 +85,14 @@ def start_graph_llm(user_prompt: str, document_bytes: bytes):
         {"messages": messages, "document": [document_bytes]}, {"recursion_limit": 5}
     )
     # Output progression of all documents
+    for m in output["messages"]:
+        m.pretty_print()
     for idx, doc_bytes in enumerate(output["document"]):
         doc = Document(BytesIO(doc_bytes))
         doc_text = "\n".join([para.text for para in doc.paragraphs])
         print(
             f"\n--- DOCUMENT {idx+1}/{len(output['document'])} ---\n{doc_text}\n--- END DOCUMENT {idx+1} ---\n"
         )
-    for m in output["messages"]:
-        m.pretty_print()
 
     return output
 
